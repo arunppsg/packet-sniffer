@@ -1,0 +1,12 @@
+
+src/*.o
+src/*.a
+src/*.json
+
+analysis/
+
+tmp/
+test/
+src/tmp/
+stc/test/
+
