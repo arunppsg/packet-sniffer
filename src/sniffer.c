@@ -19,7 +19,18 @@
 #include "af_packet_v3.h"
 #include "signal_handling.h"
 
-char sniffer_help[] = "TODO";
+char sniffer_help[] = " \
+Example Usage: \n\
+    For capturing in interface eno1: \n\
+        ./sniffer.o -c eno1 \n\
+    For using 2 threads: \n\
+        ./sniffer.o -t 2 \n\
+    For choosing output json file name: \n\
+        ./sniffer.o -j output.json \n\
+    For help: \n\
+        ./sniffer.o --help \n\
+";
+
 
 int main(int argc, char *argv[]){
 
@@ -60,9 +71,10 @@ int main(int argc, char *argv[]){
                 break;
             case 'h':
                 printf("%s\n", sniffer_help);
+                exit(0);
                 break;
             default:
-                printf("Invalid configuration list\n");
+                printf("%s\n", sniffer_help);
                 exit(0);
         }
     }

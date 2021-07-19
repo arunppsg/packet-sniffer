@@ -38,19 +38,15 @@ SNIFFER_OBJ = $(SNIFFERC:%c=%o)
 .PHONY: all
 all: clean sniffer.o
 
-#sniffer.o: $(SNIFFER_OBJ) $(SNIFFER_H)
-#	$(CC) $(CFLAGS) sniffer.c $(SNIFFER_OBJ)  -o sniffer.o
-
 sniffer.o: $(SNIFFERC) $(SNIFFER_H)
 	$(CC) $(SNIFFERC) $(CFLAGS) -o sniffer.o
-
-#sniffer.o sniffer.c 
-#sniffer.o: $(SNIFFERC) $(SNIFFER_H)
-#	$(CC) $(SNIFFERC) $(CFLAGS) -o ../analysis/sniffer.o
 
 debug-sniffer: CFLAGS += -DDEBUG
 debug-sniffer: clean sniffer.o
 
 .PHONY: clean
 clean:
-	rm -f sniffer.o *.json
+	rm -f *.o *.json
+
+clean-json:
+	rm -f *.json

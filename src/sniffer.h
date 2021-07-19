@@ -11,7 +11,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 #include <time.h>
-#include <linux/in.h>
+#include <netinet/in.h>
 
 #include "sha512.h"
 
@@ -21,7 +21,8 @@
 #define sniffer_debug(...) (fprintf(stdout, __VA_ARGS__))
 #endif
 
-pthread_mutex_t file_write_lock; 
+pthread_mutex_t file_write_lock;
+
 struct sniffer_config{
     char *capture_interface;
     char *output_json_file;
@@ -34,15 +35,26 @@ struct sniffer_config{
 #define sniffer_config_init() { (char *)"wlp3s0", (char *)"output.json", 1, 0, 0.1 }
 
 struct packet_info {
-    struct timespec ts; //timestamp
-    uint32_t caplen; //length of capture (the size of capture in frame)
-    uint32_t len; //length of packet
+    struct timespec ts;
+    uint32_t caplen;
+    uint32_t len; 
     u_short is_valid;
     u_short ip_version;
     struct in_addr ip_src, ip_dst;
     u_short protocol;
     u_short ip_ttl;
     u_short sport, dport;
+
+    uint32_t seq, ack_seq;
+    u_short doff;
+    u_short res1, res2;
+    u_short urg;
+    u_short ack;
+    u_short psh;
+    u_short rst;
+    u_short fin;
+    u_short syn;
+
     int payload_size;
     int ip_len;
     unsigned char payload_ascii[512*8]; /*Not to be used during implementation */

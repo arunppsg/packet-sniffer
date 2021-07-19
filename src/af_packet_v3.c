@@ -14,6 +14,8 @@
 #include <signal.h>
 #include <errno.h>
 #include <pthread.h>
+#include <time.h>
+#include <math.h>
 #include <sched.h>
 #include <sys/mman.h>
 #include <poll.h>
@@ -23,8 +25,6 @@
 #include <sys/sysinfo.h>
 #include <net/if.h>
 #include <net/ethernet.h>
-#include <time.h>
-#include <math.h>
 #include <linux/if_ether.h>
 #include <linux/if_packet.h>
 

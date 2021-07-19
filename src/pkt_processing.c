@@ -8,10 +8,10 @@
 #include <pcap.h>
 #include <openssl/sha.h>
 #include <stdlib.h>
-#include <linux/if_ether.h>
-#include <linux/ip.h>
-#include <linux/tcp.h>
-#include <linux/udp.h>
+#include <netinet/if_ether.h>
+#include <netinet/ip.h>
+#include <netinet/tcp.h>
+#include <netinet/udp.h>
 
 #include "sniffer.h"
 #include "sha512.h"
@@ -32,9 +32,7 @@ void ascii_hex_dump(const char *payload, int payload_size,
         if(i == 4096) //Records only the first 512 bytes
             break;
     }
- //   sniffer_debug("ASCII payload is %s\n", ascii_dump);
-    // Byte 34 - ", 92 - \. These should be escaped in json but 
-    // instead as a quick fix, we replace it by '.'
+    
     /* If the below loop statement is placed inside above loop, it returns an 
      * empty string. Not sure why it happens.
      * Also it raises segmentation fault in some cases.
@@ -62,6 +60,18 @@ void extract_tcp_packet(uint8_t *eth, u_short iphdr_len,
     }
     pi->sport = ntohs(tcph->source);
     pi->dport = ntohs(tcph->dest);
+
+    pi->seq = tcph->seq;
+    pi->ack_seq = tcph->ack_seq;
+    pi->doff = tcph->doff;
+    pi->res1 = tcph->res1;
+    pi->res2 = tcph->res2;
+    pi->urg = tcph->urg;
+    pi->ack = tcph->ack;
+    pi->psh = tcph->psh;
+    pi->syn = tcph->syn;
+    pi->rst = tcph->rst;
+    pi->fin = tcph->fin;
     
     payload = (const char *)(eth + SIZE_ETHERNET + iphdr_len + tcphdr_len);
     int payload_size = pi->ip_len - (iphdr_len + tcphdr_len);
