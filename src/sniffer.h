@@ -25,7 +25,7 @@ pthread_mutex_t file_write_lock;
 
 struct sniffer_config{
     char *capture_interface;
-    char *output_json_file;
+    char *output_file_name;
     int num_threads;
     int verbosity;
     float buffer_fraction;

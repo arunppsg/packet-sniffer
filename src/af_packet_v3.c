@@ -96,6 +96,7 @@ struct thread_storage {
     pthread_attr_t thread_attributes;
     int sockfd;   /* Socket owned by this thread */
     const char *if_name; /* Name of interface to bind the socket to */
+    char *output_file_name; /* Name of output file */
     uint8_t *mapped_buffer; /* The pointer to the mmap()'d region */
     struct tpacket_block_desc **block_header; /* The pointer to each block in mmap()'d region */
     struct tpacket_req3 ring_params; /* The ring allocation params to setsockopt() */
@@ -130,7 +131,7 @@ void ring_limits_init(struct ring_limits *rl, float frac){
     /* Don't change following parameters without good reason */
     rl->af_ring_limit      = 0xffffffff; /* setsockopt() can't allocate more than this so don't try */
     rl->af_framesize       = 2 * (1 << 10); /* default frame size: 2 KiB. */
-    rl->af_blocksize       = 4 * (1 << 20); /* 4 MiB. (must be a multiple of af_framesize) */
+    rl->af_blocksize       = 512 * (1 << 20); /* 512 MiB. (must be a multiple of af_framesize) */
     rl->af_min_blocksize   = 64 * (1 << 10); /* 64 KiB */
     rl->af_target_blocks   = 64;
     rl->af_min_blocks      = 8;
@@ -346,7 +347,7 @@ void *stats_thread_func(void *statst_arg){
 }
 
 void process_all_packets_in_block(struct tpacket_block_desc *block_hdr, 
-        struct stats_tracking *statst){
+        struct stats_tracking *statst, char *output_file_name){
     sniffer_debug("Processing packets in a block\n");
     int num_pkts = block_hdr->hdr.bh1.num_pkts, i;
     unsigned long byte_count = 0;
@@ -380,7 +381,7 @@ void process_all_packets_in_block(struct tpacket_block_desc *block_hdr,
         sniffer_debug("Printing packet valid : ");
         sniffer_debug("%d\n", pi.is_valid);
         if(pi.is_valid){
-            write_packet_info(&pi);
+            write_packet_info(&pi, output_file_name);
         }
         sniffer_debug("Going to point next packet header \n");
         pkt_hdr = (struct tpacket3_hdr *) ((uint8_t *)pkt_hdr + pkt_hdr->tp_next_offset);
@@ -565,7 +566,8 @@ int af_packet_rx_ring_fanout_capture(struct thread_storage *thread_stor){
              bstreak++;
 
              /* We found data. Process it */
-             process_all_packets_in_block(block_header[cb], statst); 
+             process_all_packets_in_block(block_header[cb], statst, 
+                     thread_stor->output_file_name); 
              
              /* Reset accounting */
              pstreak = 0;
@@ -813,6 +815,7 @@ enum status bind_and_dispatch(struct sniffer_config *cfg){
         tstor[thread].tid = 0;
         tstor[thread].sockfd = -1;
         tstor[thread].if_name = cfg->capture_interface;
+        tstor[thread].output_file_name = cfg->output_file_name;
         tstor[thread].statst = &statst;
         tstor[thread].t_start_p = &t_start_p;
         tstor[thread].t_start_c = &t_start_c;

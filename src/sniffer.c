@@ -60,8 +60,8 @@ int main(int argc, char *argv[]){
                 sniffer_debug("Capture interface is %s\n", cfg.capture_interface);
                 break;
             case 'j':
-                cfg.output_json_file = optarg;
-                sniffer_debug("Output file name %s\n", cfg.output_json_file);
+                cfg.output_file_name = optarg;
+                sniffer_debug("Output file name %s\n", cfg.output_file_name);
                 break;
             case 't':
                 cfg.num_threads = strtol(optarg, NULL, 10);
