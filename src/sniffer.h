@@ -26,13 +26,14 @@ pthread_mutex_t file_write_lock;
 struct sniffer_config{
     char *capture_interface;
     char *output_file_name;
+    int time_delta;
     int num_threads;
     int verbosity;
     float buffer_fraction;
 };
 
 
-#define sniffer_config_init() { (char *)"wlp3s0", (char *)"output.json", 1, 0, 0.1 }
+#define sniffer_config_init() { (char *)"wlp3s0", (char *)"output", 0, 1, 0, 0.1 }
 
 struct packet_info {
     struct timespec ts;

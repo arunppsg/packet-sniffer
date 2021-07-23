@@ -15,7 +15,6 @@
 #define MAX_FILENAME_SIZE 100
 
 static int packet_count = 0;
-//static char filename[MAX_FILENAME_SIZE] = "output.json";
 static char filename[MAX_FILENAME_SIZE] = "";
 
 int write_json(const char *json, char *output_file_name){
@@ -26,7 +25,6 @@ int write_json(const char *json, char *output_file_name){
     if(packet_count == 0){
         time_t rawtime;
         time(&rawtime);
-//        sprintf(filename, "output%ld.json", rawtime);
         sprintf(filename, "%s%ld.json", output_file_name, rawtime);
     }    
     packet_count = (packet_count + 1) % ENTRIES_PER_LOG;

@@ -25,6 +25,8 @@ Example Usage: \n\
         ./sniffer.o -c eno1 \n\
     For using 2 threads: \n\
         ./sniffer.o -t 2 \n\
+    For capturing upto 10 seconds: \n\
+        ./sniffer.o -T 10 \n\
     For choosing output json file name: \n\
         ./sniffer.o -j output.json \n\
     For help: \n\
@@ -44,11 +46,12 @@ int main(int argc, char *argv[]){
         static struct option long_options[] = {
             {"capture_interface", optional_argument, 0, 'c'},
             {"json_file", optional_argument, 0, 'j'},
+            {"time", optional_argument, 0, 'T'},
             {"thread_count", optional_argument, 0, 't'},
             {"help", no_argument, 0, 'h'},
             {"verbosity", no_argument, 0, 'v'}
         };
-        c = getopt_long(argc, argv, "c:j:t:h:v",
+        c = getopt_long(argc, argv, "c:j:T:t:h:v",
                 long_options, &option_index);
 
         if(c == -1)  /* end of options */
@@ -62,6 +65,9 @@ int main(int argc, char *argv[]){
             case 'j':
                 cfg.output_file_name = optarg;
                 sniffer_debug("Output file name %s\n", cfg.output_file_name);
+                break;
+            case 'T':
+                cfg.time_delta = strtol(optarg, NULL, 10);
                 break;
             case 't':
                 cfg.num_threads = strtol(optarg, NULL, 10);
