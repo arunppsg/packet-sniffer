@@ -9,6 +9,8 @@
 #include <pthread.h>
 #include <string.h>
 #include <errno.h>
+#include <pthread.h>
+#include <unistd.h>
 #include "signal_handling.h"
 
 int sig_close_flag = 0; /* Watched by threads while processing packets */
@@ -21,6 +23,15 @@ void sig_close(int signal_arg){
     psignal(signal_arg, "\nShutting down");
     sig_close_flag = 1; /* tells all thread to shutdown gracefully */
     fclose(stdin);
+}
+
+void *track_time(void *arg){
+    printf("Going to sleep \n");
+    fflush(stdout);
+    int *time = (int*)arg;
+    sleep(*time);
+    sig_close(SIGINT);
+    return 0;
 }
 
 /*

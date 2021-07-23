@@ -17,4 +17,5 @@ void enable_all_signals(void);
 
 void disable_all_signals(void);
 
+void *track_time(void *);
 #endif /* SIGNAL_HANDLING_H */

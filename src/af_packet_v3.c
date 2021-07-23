@@ -111,7 +111,7 @@ struct thread_storage {
 #define RING_LIMITS_DEFAULT_FRAC 0.01
 
 void ring_limits_init(struct ring_limits *rl, float frac){
-    sniffer_debug("Initalized ring\n");
+
     if(frac < 0.0 || frac > 1.0){
         /* sanity check */
         frac = RING_LIMITS_DEFAULT_FRAC;
@@ -131,7 +131,7 @@ void ring_limits_init(struct ring_limits *rl, float frac){
     /* Don't change following parameters without good reason */
     rl->af_ring_limit      = 0xffffffff; /* setsockopt() can't allocate more than this so don't try */
     rl->af_framesize       = 2 * (1 << 10); /* default frame size: 2 KiB. */
-    rl->af_blocksize       = 512 * (1 << 20); /* 512 MiB. (must be a multiple of af_framesize) */
+    rl->af_blocksize       = 4 * (1 << 20); /* 4 MiB. (must be a multiple of af_framesize) */
     rl->af_min_blocksize   = 64 * (1 << 10); /* 64 KiB */
     rl->af_target_blocks   = 64;
     rl->af_min_blocks      = 8;
@@ -140,7 +140,7 @@ void ring_limits_init(struct ring_limits *rl, float frac){
                                                    algorithm for spreading traffic across sockets.
                                                   Since our case is only to capture packet, this can help
                                                   in load balanding of traffic */
-
+    sniffer_debug("Initalized ring\n");
 }
 
 void af_packet_stats(int sockfd, struct stats_tracking *statst){
@@ -851,7 +851,19 @@ enum status bind_and_dispatch(struct sniffer_config *cfg){
     }
     /* Initialize frame handers */
     // TODO 
-
+    
+    // Initializing timer thread
+    pthread_t timer_thread;
+    int timeout_time = cfg->time_delta;
+    if(timeout_time > 0){
+        pthread_attr_t attr;
+        int err;
+        err = pthread_attr_init(&attr);
+        if(err != 0)
+            fprintf(stderr, "Error occured in initializing thread attributes \n");
+        pthread_create(&timer_thread, &attr, track_time, &timeout_time);
+    }
+    
     /* Stats thread is the first thread to be started */
     pthread_t stats_thread;
     err = pthread_create(&stats_thread, NULL, stats_thread_func, &statst);
@@ -919,6 +931,11 @@ enum status bind_and_dispatch(struct sniffer_config *cfg){
       "%" PRIu64 " packets dropped\n"
       "%" PRIu64 " socket queue freezes\n",
       statst.received_packets, statst.received_bytes, statst.socket_packets, statst.socket_drops, statst.socket_freezes);
-    
+   
+    /* Control reaches here only if interrupt is pressed 
+     * before timeout */ 
+    if(timeout_time > 0){
+        pthread_kill(timer_thread, SIGKILL);
+    }
     return status_ok;
 }
