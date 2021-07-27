@@ -40,6 +40,8 @@ struct thread_storage {
     char *datagram;
 };
 
+void *flood(void *);
+
 void *flood(void *tstor_arg){
     struct thread_storage *tstor = (struct thread_storage *) tstor_arg;
     int sockfd = tstor->sockfd;
@@ -53,84 +55,9 @@ void *flood(void *tstor_arg){
                    err, strerror(err), tstor->tnum);
        else
            printf("Successfuly sent packet in thread %d\n", tstor->tnum);
+       fflush(stdout);
        sleep(delay);
     }
-}
-
-int bind_and_dispatch(char *datagram, struct test_config *cfg){
-
-/*    struct ether_header *eh = (struct ether_header *) datagram;
-    struct iphdr *iph = (struct iphdr *) (datagram + sizeof(struct ether_header));
-    struct tcphdr *tcph = (struct tcphdr *)(datagram + sizeof(struct iphdr) + sizeof(struct ether_header));
-    char *payload = (char *)(datagram + sizeof(struct iphdr) + sizeof(struct ether_header) + 20);
-    
-    print_ethernet_header(eh);
-    print_ip_header(iph);
-    print_tcp_header(tcph);
-    print_payload(payload);*/
-    
-    int num_threads = cfg->thread_count;
-    double sleep_time = (cfg->rate / cfg->thread_count);
-    struct thread_storage *tstor;
-    tstor = (struct thread_storage *) malloc (num_threads * sizeof (struct thread_storage));
-    if(!tstor){
-        perror("could not allocate memory for struct thread storage");
-    }
-
-    struct sockaddr_in sin;
-    sin.sin_family = AF_INET;
-    sin.sin_port = htons(80);
-    sin.sin_addr.s_addr = inet_addr(cfg->dest_ip); // destination address
-
-    int err;
-    for(int thread=0; thread < num_threads; thread++){
-        tstor[thread].tnum = thread;
-        tstor[thread].tid = 0;
-        tstor[thread].sockfd = -1;
-        tstor[thread].delay = sleep_time;
-        tstor[thread].dest_ip = cfg->dest_ip;
-        tstor[thread].datagram = datagram;
-
-
-        int sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_TCP);
-        if(sockfd == -1){
-            fprintf(stderr, "error creating socket for thread %d\n", thread); 
-            exit(255);
-        }
-        tstor[thread].sockfd = sockfd;
-
-        int val = 1;
-        err = setsockopt(sockfd, IPPROTO_IP, IP_HDRINCL, &val, sizeof(val));
-        if(err){
-            fprintf(stderr, "error setting socket options for thread %d\n", thread);
-            exit(255);
-        }
-
-        err = connect(sockfd, (struct sockaddr *)&sin, sizeof(sin));
-        if(err != 0)
-            printf("connection failed %d error message %s for thread %d\n", 
-                    err, strerror(err), thread);
-        else
-            printf("Successfully connected for thread %d\n", thread);
-
-        tstor[thread].datagram = datagram;
-
-        pthread_attr_t thread_attributes;
-        err = pthread_attr_init(&thread_attributes); 
-        if(err != 0){
-            fprintf(stderr, "%s: error initializing thread attributes for thread %d\n", 
-                    strerror(err), thread);
-            exit(255);
-        }
-
-        err = pthread_create(&(tstor[thread].tid), &thread_attributes,
-                flood, &(tstor[thread]));
-        if(err){
-           fprintf(stderr, "error creating thread %d\n", thread);
-           exit(255);
-        }
-    }
-    return 0;
 }
 
 int generate_packet(char* datagram, struct test_config *cfg){
@@ -199,7 +126,58 @@ int main(int argc, char *argv[]){
     char datagram[4096];
     memset(datagram, 0, 4096);
 
-    generate_packet(datagram, &cfg); 
-    bind_and_dispatch(datagram, &cfg);
+    generate_packet(datagram, &cfg);
+
+    struct sockaddr_in sin;
+    sin.sin_family = AF_INET;
+    sin.sin_port = htons(80);
+    sin.sin_addr.s_addr = inet_addr(cfg.dest_ip); // destination address
+
+    int err;
+    struct thread_storage tstor;
+    tstor.tnum = 0;
+    tstor.delay = 1 / cfg.rate; 
+    tstor.dest_ip = cfg.dest_ip;
+    tstor.datagram = datagram;
+
+    int sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_TCP);
+    if(sockfd == -1){
+        fprintf(stderr, "error creating socket for thread \n"); 
+        exit(255);
+    }
+    tstor.sockfd = sockfd;
+    int thread = 0;
+    int val = 1;
+    err = setsockopt(sockfd, IPPROTO_IP, IP_HDRINCL, &val, sizeof(val));
+    if(err){
+        fprintf(stderr, "error setting socket options for thread \n");
+        exit(255);
+    }
+
+    err = connect(sockfd, (struct sockaddr *)&sin, sizeof(sin));
+    if(err != 0)
+        printf("connection failed %d error message %s for thread %d\n", 
+                err, strerror(err), thread);
+    else
+        printf("Successfully connected for thread %d\n", thread);
+
+    tstor.datagram = datagram;
+
+    pthread_attr_t thread_attributes;
+    err = pthread_attr_init(&thread_attributes); 
+    if(err != 0){
+        fprintf(stderr, "%s: error initializing thread attributes for thread %d\n", 
+                strerror(err), thread);
+        exit(255);
+    }
+
+    err = pthread_create(&(tstor.tid), &thread_attributes,
+            flood, &(tstor));
+    if(err){
+       fprintf(stderr, "error creating thread %d\n", thread);
+       exit(255);
+    }
+
+    pthread_join(tstor.tid, NULL); 
     return 0;
 }

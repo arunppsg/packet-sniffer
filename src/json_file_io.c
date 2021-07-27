@@ -60,10 +60,10 @@ int write_packet_info(struct packet_info *pi, char *output_file_name){
     sprintf(text, "{\"timestamp\":%lld.%.9ld,", (long long)pi->ts.tv_sec, pi->ts.tv_nsec);
     strcpy(json, text);
 
-    sprintf(text, "\"s_ip\":%s,", inet_ntoa(pi->ip_src));
+    sprintf(text, "\"s_ip\":\"%s\",", inet_ntoa(pi->ip_src));
     strcat(json, text);
 
-    sprintf(text, "\"d_ip\":%s,", inet_ntoa(pi->ip_dst));
+    sprintf(text, "\"d_ip\":\"%s\",", inet_ntoa(pi->ip_dst));
     strcat(json, text);
 
     sprintf(text, "\"ip_version\":%d,", pi->ip_version);
@@ -104,7 +104,7 @@ int write_packet_info(struct packet_info *pi, char *output_file_name){
     sprintf(text, "\"payload_ascii\":\"%s\",", pi->payload_ascii);
     strcat(json, text);
 
-    sprintf(text, "\"payload_hash\":%s}", pi->payload_hash);
+    sprintf(text, "\"payload_hash\":\"%s\"}", pi->payload_hash);
     strcat(json, text);
 
 //    printf("%s\n", json);

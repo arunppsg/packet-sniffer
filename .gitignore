@@ -10,3 +10,4 @@ test/
 src/tmp/
 stc/test/
 tests/tmp
+tests/*.out

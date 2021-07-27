@@ -31,4 +31,3 @@ clean:
 
 clean-json:
 	rm -f *.json
-                                

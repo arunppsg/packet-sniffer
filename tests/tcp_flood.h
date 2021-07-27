@@ -16,4 +16,13 @@
 #define debug(...) (fprintf(stdout, __VA_ARGS__))
 #endif
 
+struct test_config {
+    int timeout_time;
+    int thread_count;
+    char *dest_ip;
+    int rate;  // Number of packets to send per second
+};
+
+#define test_config_init() {10, 1, (char*)"192.168.1.1", 100}
+
 #endif

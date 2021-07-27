@@ -23,13 +23,15 @@ int print_ethernet_header(struct ether_header *eh){
 }
 
 int construct_ip_header(struct iphdr *iph, char *dest_ip){
+   debug("In construct ip header destination ip %s \n", dest_ip);
    iph->ihl = 5;
    iph->version = 4;
    iph->tos = 16;
    iph->id = htons(54321);
    iph->protocol = 6; // tcp
-   iph->saddr = inet_addr("13.13.13.13");
+   iph->saddr = inet_addr("13.14.15.16"); // All spoofed packet has this address.
    iph->daddr = inet_addr(dest_ip);
+
    return 0;
 }
 
@@ -43,7 +45,9 @@ int print_ip_header(struct iphdr *iph){
           "\nSource address %s " \
           "Destination address %s\n",
           iph->ihl, iph->version, iph->protocol,
-          inet_ntoa(in), inet_ntoa(out));
+          inet_ntoa(in), inet_ntoa(out));  // The same in address will
+            // be printed in place of destination address above.
+            // Refer:https://stackoverflow.com/questions/48799606/inet-ntoa-gives-the-same-result-when-called-with-two-different-addresses
     return 0;
 }
 
