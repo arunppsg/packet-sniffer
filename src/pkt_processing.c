@@ -61,8 +61,8 @@ void extract_tcp_packet(uint8_t *eth, u_short iphdr_len,
     pi->sport = ntohs(tcph->source);
     pi->dport = ntohs(tcph->dest);
 
-    pi->seq = tcph->seq;
-    pi->ack_seq = tcph->ack_seq;
+    pi->seq = ntohs(tcph->seq);
+    pi->ack_seq = ntohs(tcph->ack_seq);
     pi->doff = tcph->doff;
     pi->res1 = tcph->res1;
     pi->res2 = tcph->res2;
