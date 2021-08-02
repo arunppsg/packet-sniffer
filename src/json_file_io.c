@@ -11,10 +11,10 @@
 
 #define MAX_JSON_STRING_SIZE 65536
 #define MAX_FIELD_SIZE 65536
-#define ENTRIES_PER_LOG 1000000
+#define ENTRIES_PER_LOG 10000000
 #define MAX_FILENAME_SIZE 100
 
-static int packet_count = 0;
+static long int packet_count = 0;
 static char filename[MAX_FILENAME_SIZE] = "";
 
 int write_json(const char *json, char *output_file_name){
@@ -101,8 +101,8 @@ int write_packet_info(struct packet_info *pi, char *output_file_name){
     sprintf(text, "\"payload_size\":%d,", pi->payload_size);
     strcat(json, text);
 
-    sprintf(text, "\"payload_ascii\":\"%s\",", pi->payload_ascii);
-    strcat(json, text);
+//    sprintf(text, "\"payload_ascii\":\"%s\",", pi->payload_ascii);
+//    strcat(json, text);
 
     sprintf(text, "\"payload_hash\":\"%s\"}", pi->payload_hash);
     strcat(json, text);
