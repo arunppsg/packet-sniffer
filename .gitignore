@@ -3,7 +3,10 @@ src/*.o
 src/*.a
 src/*.json
 
-analysis/
+analysis/*.json
+analysis/tmp/
+analysis/logs/
+analysis/__pycache__/
 
 tmp/
 test/
@@ -11,3 +14,5 @@ src/tmp/
 stc/test/
 tests/tmp
 tests/*.out
+
+*.out
