@@ -23,6 +23,6 @@ struct test_config {
     int rate;  // Number of packets to send per second
 };
 
-#define test_config_init() {10, 1, (char*)"192.168.1.1", 100}
+#define test_config_init() {100, 1, (char*)"192.168.1.1", 1000}
 
 #endif

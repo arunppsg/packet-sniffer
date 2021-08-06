@@ -22,8 +22,9 @@
 #endif
 
 char tcp_generator_help[] = 
-    "%s [INPUT] [OPTIONS]: \n"
-    "INPUT\n:"
+    "[INPUT] [OPTIONS]: \n"
+    "INPUT:\n"
+    "   [-T or --thread] thraed count
     "   [-i or --interface] network_interface #capture packet from interface \n"
     "   [-d or --dip] destination ip \n"
     "   [-r or --rate] rate at which to generate packets \n"

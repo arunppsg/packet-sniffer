@@ -8,6 +8,7 @@
 
 #include "json_file_io.h"
 #include "sniffer.h"
+#include "bloom_filter.h"
 
 #define MAX_JSON_STRING_SIZE 65536
 #define MAX_FIELD_SIZE 65536

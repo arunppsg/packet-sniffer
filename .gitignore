@@ -7,6 +7,8 @@ analysis/*.json
 analysis/tmp/
 analysis/logs/
 analysis/__pycache__/
+analysis/.ipynb_checkpoints/
+analysis/results.csv
 
 tmp/
 test/
@@ -14,5 +16,6 @@ src/tmp/
 stc/test/
 tests/tmp
 tests/*.out
+tests/test.o
 
 *.out

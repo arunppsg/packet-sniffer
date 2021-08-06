@@ -29,6 +29,10 @@ Example Usage: \n\
         ./sniffer.o -t 10 \n\
     For choosing output json file name: \n\
         ./sniffer.o -j output.json \n\
+    For choosing capture mode: \n\
+        Mode can be 0, 1 or 2. 0 generates only log files \n\
+        1 builds bloom filter. 2 applies the built bloom filter \n\
+        ./sniffer.o -m 0
     For help: \n\
         ./sniffer.o --help \n\
 ";
@@ -49,7 +53,8 @@ int main(int argc, char *argv[]){
             {"time", optional_argument, 0, 't'},
             {"thread_count", optional_argument, 0, 'T'},
             {"help", no_argument, 0, 'h'},
-            {"verbosity", no_argument, 0, 'v'}
+            {"verbosity", no_argument, 0, 'v'},
+            {"mode", optional_argument, 0, 'm'}
         };
         c = getopt_long(argc, argv, "c:j:T:t:h:v",
                 long_options, &option_index);
@@ -75,6 +80,9 @@ int main(int argc, char *argv[]){
             case 'v':
                 cfg.verbosity = 1;
                 break;
+            case 'm':
+                cfg.m = strtol(optarg, NULL, 10); 
+                break;
             case 'h':
                 printf("%s\n", sniffer_help);
                 exit(0);
@@ -96,5 +104,3 @@ int main(int argc, char *argv[]){
   
     return 0;
 }
-
-
