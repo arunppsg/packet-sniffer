@@ -22,10 +22,11 @@
 #endif
 
 pthread_mutex_t file_write_lock;
+pthread_mutex_t hash_table_lock;
 
 struct sniffer_config{
     char *capture_interface;
-    char *output_file_name;
+    char *logdir;
     int time_delta;
     int num_threads;
     int verbosity;
@@ -34,7 +35,7 @@ struct sniffer_config{
 };
 
 
-#define sniffer_config_init() { (char *)"wlp3s0", (char *)"output", 0, 1, 0, 0.1, 0}
+#define sniffer_config_init() { (char *)"wlp3s0", (char *)"output/", 0, 1, 0, 0.1, 0}
 
 struct packet_info {
     struct timespec ts;

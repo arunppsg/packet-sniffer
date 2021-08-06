@@ -33,6 +33,7 @@
 #include "pkt_processing.h"
 #include "json_file_io.h"
 #include "utils.h"
+#include "bloom_filter.h"
 
 /* 
  * Signal Handling
@@ -74,10 +75,16 @@ struct ring_limits {
 };
 
 /* struct stats_tracking tracks stats for each thread and stores 
- * those stats. It is one of the first to get started */
+ * those stats. It is one of the first to get started.
+ * This thread also stores the pointer to bloom filter
+ * data structure which is used for analysis.*/
 struct stats_tracking {
     struct thread_storage *tstor;
+    BloomFilter *bf;
+	struct log_file *pkt_log;
+	struct log_file *dup_pkt_log;
     int num_threads;
+	int mode;
     uint64_t received_packets;
     uint64_t received_bytes;
     uint64_t socket_packets;
@@ -87,6 +94,8 @@ struct stats_tracking {
     int *t_start_p;  /* Clean start predicate */
     pthread_cond_t *t_start_c; /* Clean start condition */
     pthread_mutex_t *t_start_m; /* Clean start mutex */
+    pthread_mutex_t *log_access;
+    pthread_mutex_t *bf_access;
 };
 
 /* Stores details about the thread */
@@ -106,6 +115,8 @@ struct thread_storage {
     int *t_start_p;  /* Clean start predicate */
     pthread_cond_t *t_start_c; /* Clean start condition */
     pthread_mutex_t *t_start_m;   /* Clean start mutex */
+    pthread_mutex_t *log_access;
+    pthread_mutex_t *bf_access;
 };
 
 #define RING_LIMITS_DEFAULT_FRAC 0.01
@@ -166,6 +177,7 @@ void af_packet_stats(int sockfd, struct stats_tracking *statst){
     }
 
 }
+
 void *stats_thread_func(void *statst_arg){
 
     struct stats_tracking *statst = (struct stats_tracking *) statst_arg;
@@ -228,7 +240,7 @@ void *stats_thread_func(void *statst_arg){
         double worst_rusage = 0; /* Worst average buffer usage */
         double worst_i_rusage = 0; /* Worst instantaneous ring buffer usage */
         for(int thread = 0; thread < statst->num_threads; thread++){
-//            printf("sockfd %d\n", statst->tstor[thread].sockfd); 
+
             af_packet_stats(statst->tstor[thread].sockfd, (struct stats_tracking *)statst);
 
             int thread_block_count = statst->tstor[thread].ring_params.tp_block_nr;
@@ -347,12 +359,17 @@ void *stats_thread_func(void *statst_arg){
 }
 
 void process_all_packets_in_block(struct tpacket_block_desc *block_hdr, 
-        struct stats_tracking *statst, char *output_file_name){
+        struct stats_tracking *statst){
+	/* TODO
+	 * The output file name should vary with respect to mode
+	 */
+    int err;
     sniffer_debug("Processing packets in a block\n");
     int num_pkts = block_hdr->hdr.bh1.num_pkts, i;
-    unsigned long byte_count = 0;
-    struct tpacket3_hdr *pkt_hdr;
-  
+    unsigned long byte_count = 0; 
+	struct log_file *pkt_log = statst->pkt_log;
+	struct log_file *dup_pkt_log = statst->dup_pkt_log;
+	struct tpacket3_hdr *pkt_hdr;
     pkt_hdr = (struct tpacket3_hdr *) ((uint8_t *) block_hdr + block_hdr->hdr.bh1.offset_to_first_pkt);
     for (i = 0; i < num_pkts; ++i) {
         struct packet_info pi;
@@ -380,9 +397,45 @@ void process_all_packets_in_block(struct tpacket_block_desc *block_hdr,
         sniffer_debug("Finished extracting packet info \n");
         sniffer_debug("Printing packet valid : ");
         sniffer_debug("%d\n", pi.is_valid);
-        if(pi.is_valid){
-            write_packet_info(&pi, output_file_name);
+        if (pi.is_valid) {
+			int mode = statst->mode;
+            
+			BloomFilter *bf = statst->bf;
+
+			write_packet_info(&pi, pkt_log, statst->log_access);	
+			if (mode == 1) {
+				/* Add hash entry to bloom filter and log packet */	
+				err = pthread_mutex_lock(statst->bf_access);
+                if(err != 0){
+                    fprintf(stderr, "%s: error acquiring hash add lock\n",
+                            strerror(err));
+                } 
+				cpp_add(bf, (const char *)pi.payload_hash); 
+                err = pthread_mutex_unlock(statst->bf_access);
+                if(err != 0){
+                    fprintf(stderr, "%s: error releasing hash add lock\n",
+                            strerror(err));
+                } 
+			} else if (mode == 2) {
+				/* Add log entry to test file.
+				 * Check whether hash entry is present. If not, write to 
+				 * a seperate log file.  */
+
+				/* TODO
+				 * Ideally the lock here is not needed because this operation only
+				 * requires read from the bloom filter */
+				pthread_mutex_lock(statst->bf_access);
+				int result = cpp_check(bf, (const char *)pi.payload_hash);
+				pthread_mutex_unlock(statst->bf_access); 
+
+				if (result == 1) {
+					/* Hash is found in the table - a dup packet */
+                    printf("Duplicate packet \n");
+					write_packet_info(&pi, dup_pkt_log, statst->log_access);	
+				} 
+			} 
         }
+		
         sniffer_debug("Going to point next packet header \n");
         pkt_hdr = (struct tpacket3_hdr *) ((uint8_t *)pkt_hdr + pkt_hdr->tp_next_offset);
         sniffer_debug("Pointer to next packet header \n");
@@ -504,13 +557,16 @@ int af_packet_rx_ring_fanout_capture(struct thread_storage *thread_stor){
      struct timespec ts;
      (void)time_elapsed(&ts); /* Initializes ts with current time */
      double time_d; /* time delta */
+
      while(sig_close_workers == 0){
         /* Check whether the 'user' bit is set or not on the block. 
          * If the bit is set, the block has been filled by the kernel and
          * now we should process the block. Otherwise, the block is still owned 
          * by the kernel and we should wait.
          */
+
          if((block_header[cb]->hdr.bh1.block_status & TP_STATUS_USER) == 0){
+
              /*This branch is for 'user' bit not set meaning the kernel is 
               * still filling up the block with new packets */
 
@@ -526,14 +582,14 @@ int af_packet_rx_ring_fanout_capture(struct thread_storage *thread_stor){
              if(err != 0){
                  fprintf(stderr, "%s: error acquiring bstreak mutex lock \n", strerror(err));
                  exit(255);
-             }
+             } 
 
              block_streak_hist[bstreak] += time_d;
              err = pthread_mutex_unlock(bstreak_m);
              if(err != 0){
                  fprintf(stderr, "%s: error releasing bstreak mutex unlock \n", strerror(err));
                  exit(255);
-             }
+             } 
 
              bstreak = 0;
 
@@ -560,14 +616,15 @@ int af_packet_rx_ring_fanout_capture(struct thread_storage *thread_stor){
              } else {
                 pstreak++;
              }
+             
          } else {
+             
              /* In this branch, the bit is set meaning the kernel has filled this block 
               * and returned it to us for processing */
              bstreak++;
 
-             /* We found data. Process it */
-             process_all_packets_in_block(block_header[cb], statst, 
-                     thread_stor->output_file_name); 
+             /* We found data. Process it */ 
+             process_all_packets_in_block(block_header[cb], statst); 
              
              /* Reset accounting */
              pstreak = 0;
@@ -577,6 +634,7 @@ int af_packet_rx_ring_fanout_capture(struct thread_storage *thread_stor){
 
              cb += 1;
              cb = cb % thread_block_count;
+             
          }
      } /* End of while */
      fprintf(stderr, "Thread %d with thread id %lu exiting \n",
@@ -744,6 +802,8 @@ enum status bind_and_dispatch(struct sniffer_config *cfg){
     int t_start_p = 0;
     pthread_cond_t t_start_c = PTHREAD_COND_INITIALIZER;
     pthread_mutex_t t_start_m = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_t log_access = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_t bf_access = PTHREAD_MUTEX_INITIALIZER;
 
     struct stats_tracking statst;
     memset(&statst, 0, sizeof(statst));
@@ -751,9 +811,49 @@ enum status bind_and_dispatch(struct sniffer_config *cfg){
     statst.t_start_p = &t_start_p;
     statst.t_start_c = &t_start_c;
     statst.t_start_m = &t_start_m;
+    statst.log_access = &log_access;
+    statst.bf_access = &bf_access;
     if(cfg->verbosity == 1){
         statst.verbosity = 1;
     }
+
+    statst.mode = cfg->mode;
+
+    statst.pkt_log = (struct log_file *)malloc(sizeof(struct log_file));
+	memset(statst.pkt_log, 0, sizeof(struct log_file));
+	statst.pkt_log->pkt_count = 0;
+	strcpy(statst.pkt_log->dirname, cfg->logdir);
+	strcpy(statst.pkt_log->filename, "");
+	time_t rawtime;
+	time(&rawtime);
+	sprintf(statst.pkt_log->filename, "%slog%ld.json", statst.pkt_log->dirname, rawtime);
+	statst.pkt_log->mode = 1;
+
+	statst.dup_pkt_log = (struct log_file *)malloc(sizeof(struct log_file));
+	memset(statst.dup_pkt_log, 0, sizeof(struct log_file));
+	statst.dup_pkt_log->pkt_count = 0;
+	strcpy(statst.dup_pkt_log->dirname, cfg->logdir);
+	strcpy(statst.dup_pkt_log->filename, "");
+	sprintf(statst.dup_pkt_log->filename, "%sdup_pkt_log%ld.json", 
+			statst.dup_pkt_log->dirname, rawtime);
+	statst.dup_pkt_log->mode = 2;
+    printf("Intialized duplicate log file. \nfilename: %s directory name: %s mode: %d \n",
+           statst.dup_pkt_log->filename, statst.dup_pkt_log->dirname, statst.dup_pkt_log->mode);
+
+    BloomFilter *bf = cpp_create_bloom_filter();
+    if(!bf){
+        perror("could not allocate memory for bloom filter\n");
+        exit(255);
+    }
+    
+    if (statst.mode == 2){
+        /* Perform detection */ 
+		cpp_load(bf);
+        printf("Loaded bloom filter ");
+    } 
+        
+    statst.bf = bf;
+	
     struct thread_storage *tstor; // pointer to array of struct thread_storage, one for each thread 
     tstor = (struct thread_storage *)malloc(num_threads * sizeof(struct thread_storage));
     if(!tstor){
@@ -815,11 +915,13 @@ enum status bind_and_dispatch(struct sniffer_config *cfg){
         tstor[thread].tid = 0;
         tstor[thread].sockfd = -1;
         tstor[thread].if_name = cfg->capture_interface;
-        tstor[thread].output_file_name = cfg->output_file_name;
+		// tstor[thread].output_file_name = cfg->output_file_name;
         tstor[thread].statst = &statst;
         tstor[thread].t_start_p = &t_start_p;
         tstor[thread].t_start_c = &t_start_c;
         tstor[thread].t_start_m = &t_start_m;
+        tstor[thread].log_access = &log_access;
+        tstor[thread].bf_access = &bf_access;
 
         err = pthread_attr_init(&(tstor[thread].thread_attributes));
         if (err){
@@ -931,7 +1033,17 @@ enum status bind_and_dispatch(struct sniffer_config *cfg){
       "%" PRIu64 " packets dropped\n"
       "%" PRIu64 " socket queue freezes\n",
       statst.received_packets, statst.received_bytes, statst.socket_packets, statst.socket_drops, statst.socket_freezes);
-   
+  
+	if(statst.mode == 1){
+		/* Write bloom filter */
+        cpp_write(bf);
+/*	    FILE *fp = fopen("bloomfilter.data", "wb");
+        if(fp != NULL){
+            fwrite(bf, bloom_filter_size(), 1, fp);
+            fclose(fp);
+        }    */
+	}
+
     /* Control reaches here only if interrupt is pressed 
      * before timeout */ 
     if(timeout_time > 0){

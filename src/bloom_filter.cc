@@ -3,29 +3,26 @@
 #include <string>
 #include <vector>
 #include <cmath>
-#include "xxhash64.h"
+#include <cstring>
 #include <cstdint>
-#include "bloom_filter.h"
 
+#include "bloom_filter.h"
+#include "xxhash64.h"
 /*
  * This program defines BloomFilter class 
  */
 
+
 BloomFilter::BloomFilter(){
-    memset(this, 0, sizeof( BloomFilter ));
+    //memset(this, 0, sizeof( BloomFilter ));
 //    this->m = 100000000;
 //    this->n = 10000000000;
-    this->m = 10000;
-    this->n = 10000000;
-    this->bit_array.resize(this->m, 0);
+    this->m = 100;
+    this->n = 10000; 
     this->k = this->get_optimal_k();
-}
-
-BloomFilter::BloomFilter(long m, long n){
-    this->m = m;
-    this->n = n;
-    this->bit_array.resize(this->m, 0);
-    this->k = this->get_optimal_k();
+    this->bit_array = new bool[this->n];
+    for(int i=0; i<this->n; ++i)
+        this->bit_array[i] = 0;
 }
 
 int BloomFilter::get_optimal_k(){
@@ -47,36 +44,29 @@ int BloomFilter::add(std::string message){
 }
 
 int BloomFilter::write(){
-    std::ofstream ofs("bloomfilter.data");
-    ofs << this->m << std::endl;
-    ofs << this->n << std::endl;
-    ofs << this->k << std::endl;
-    for(int i=0; i<this->bit_array.size(); ++i)
-        ofs << this->bit_array[i];
-    ofs << std::endl;
+    /*std::ofstream ofs("bloomfilter.data");
+    for(auto item: this->bit_array)
+        ofs << item;
+    ofs.close();*/
+    FILE *fp = fopen("bloomfilter.data", "wb");
+    fwrite(this->bit_array, sizeof(bool), sizeof(this->bit_array), fp);
+    fclose(fp);
+
     return 0;
 }
 
 int BloomFilter::load(){
-    std::ifstream ifs("bloomfilter.data");
-    std::string line;
-    ifs >> line;
-    this->m = std::stol( line );
-    line.clear();
-
-    ifs >> line;
-    this->n = std::stol( line );
-    line.clear();
-
-    ifs >> line;
-    this->k = std::stoi( line );
-    line.clear();
-
-    this->bit_array.resize(this->m, 0);
-    ifs >> line;
-    for(int i=0; i<line.length(); ++i){
+    /*std::ifstream ifs("bloomfilter.data");
+    std::string line = "";
+    ifs >> line; 
+    for(unsigned int i=0; i<line.length(); ++i){
         this->bit_array[i] = (line[i] == '1');
     }
+    ifs.close();
+    */
+    FILE *fp = fopen("bloomfilter.data", "rb");
+    fread(this->bit_array, sizeof(bool), sizeof(this->bit_array), fp);
+    fclose(fp);
     return 0;
 }
 
@@ -107,12 +97,14 @@ int cpp_print(BloomFilter *bf){
 
 BloomFilter* cpp_load(BloomFilter *bf){
     bf->load();
+    std::cout << "Successfully loaded bloom filter \n";
+    cpp_print(bf);
     return bf;
 }
 
-BloomFilter* cpp_write(BloomFilter *bf){
+int cpp_write(BloomFilter *bf){
     bf->write();
-    return bf;
+	return 0; 
 }
 
 int cpp_check(const BloomFilter *bf, const char* message){
@@ -130,6 +122,11 @@ int cpp_add(BloomFilter *bf, const char* message){
 BloomFilter* cpp_create_bloom_filter(){
     return new BloomFilter();
 }
+
+int bloom_filter_size(){
+    return sizeof(BloomFilter);
+}
+
 // Function for testing
 void print_result(std::string message, bool result){
     if(result == 0)

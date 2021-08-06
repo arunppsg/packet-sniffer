@@ -3,6 +3,7 @@
  * It defines BloomFilter class
  */
 
+
 #ifndef BLOOMFILTER_H
 #define BLOOMFILTER_H
 
@@ -10,20 +11,16 @@
     class BloomFilter{
         int k;
         long m, n;
-        std::vector <bool> bit_array;
-        std::string json_file_name;
+        bool *bit_array; 
     public:
-        BloomFilter();   
-        BloomFilter(long m, long n);
- 
+        BloomFilter();
         int get_optimal_k();
         long compute_hash(std::string, int seed) const;
         int add(std::string);
         int check(std::string) const;
         int write();
         int load();
-        int print();
-        std::string get_json_file_name() const;
+        int print(); 
     };
 #else
     typedef struct BloomFilter BloomFilter;
@@ -37,17 +34,19 @@
 //    extern void c_function(BloomFilter*);
     extern int cpp_print(BloomFilter*);
     extern BloomFilter* cpp_load(BloomFilter*);
-    extern BloomFilter* cpp_write(BloomFilter*);
+    extern int cpp_write(BloomFilter*);
     extern int cpp_check(const BloomFilter*, const char*);
     extern int cpp_add(BloomFilter*, const char*);
     extern BloomFilter* cpp_create_bloom_filter();
+    extern int bloom_filter_size();
 #else 
     extern int cpp_print();
     extern BloomFilter* cpp_load();
-    extern BloomFilter* cpp_write(
+    extern int cpp_write(
     extern int cpp_check();
-    extern BloomFilter* cpp_add();
+    extern int cpp_add();
     extern BloomFilter* cpp_create_bloom_filter();
+    extern int bloom_filter_size();
 #endif
 
 #ifdef __cplusplus

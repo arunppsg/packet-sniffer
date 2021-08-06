@@ -74,8 +74,9 @@ void extract_tcp_packet(uint8_t *eth, u_short iphdr_len,
     pi->fin = tcph->fin;
     
     payload = (const char *)(eth + SIZE_ETHERNET + iphdr_len + tcphdr_len);
-    int payload_size = pi->ip_len - (iphdr_len + tcphdr_len);
-    if(payload_size > 0){
+    //int payload_size = pi->ip_len - (iphdr_len + tcphdr_len);
+    int payload_size = strlen(payload); 
+    if(payload_size > 3){
         sha512(payload, pi->payload_hash);
         pi->is_valid = 1;
         pi->payload_size = payload_size; 
@@ -96,8 +97,9 @@ void extract_udp_packet(uint8_t *eth, u_short iphdr_len,
     struct udphdr *udph = (struct udphdr *)(eth + ETH_HLEN + iphdr_len);
     const char *payload;
     payload = (const char *)(eth + SIZE_ETHERNET + iphdr_len + UDP_HEADER_LEN);
-    int payload_size = ntohs(udph->len) - UDP_HEADER_LEN;
-    if(payload_size > UDP_HEADER_LEN){
+    //int payload_size = ntohs(udph->len) - UDP_HEADER_LEN;
+    int payload_size = strlen(payload);
+    if(payload_size > 3){
         sha512(payload, pi->payload_hash);
         pi->is_valid = 1;
         pi->payload_size = payload_size; 
