@@ -105,14 +105,14 @@ int cpp_print(BloomFilter *bf){
     return 0;
 }
 
-BloomFilter* cpp_load(BloomFilter *bf){
+int cpp_load(BloomFilter *bf){
     bf->load();
-    return bf;
+    return 0;
 }
 
-BloomFilter* cpp_write(BloomFilter *bf){
+int cpp_write(BloomFilter *bf){
     bf->write();
-    return bf;
+	return 0; 
 }
 
 int cpp_check(const BloomFilter *bf, const char* message){

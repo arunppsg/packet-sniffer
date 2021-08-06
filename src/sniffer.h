@@ -22,10 +22,11 @@
 #endif
 
 pthread_mutex_t file_write_lock;
+pthread_mutex_t hash_table_lock;
 
 struct sniffer_config{
     char *capture_interface;
-    char *output_file_name;
+    char *logdir;
     int time_delta;
     int num_threads;
     int verbosity;

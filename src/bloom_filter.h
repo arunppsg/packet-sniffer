@@ -36,17 +36,17 @@
 #if defined(__STDC__) || defined(__cplusplus)
 //    extern void c_function(BloomFilter*);
     extern int cpp_print(BloomFilter*);
-    extern BloomFilter* cpp_load(BloomFilter*);
-    extern BloomFilter* cpp_write(BloomFilter*);
+    extern int cpp_load(BloomFilter*);
+    extern int cpp_write(BloomFilter*);
     extern int cpp_check(const BloomFilter*, const char*);
     extern int cpp_add(BloomFilter*, const char*);
     extern BloomFilter* cpp_create_bloom_filter();
 #else 
     extern int cpp_print();
-    extern BloomFilter* cpp_load();
-    extern BloomFilter* cpp_write(
+    extern int cpp_load();
+    extern int cpp_write(
     extern int cpp_check();
-    extern BloomFilter* cpp_add();
+    extern int cpp_add();
     extern BloomFilter* cpp_create_bloom_filter();
 #endif
 

@@ -32,6 +32,8 @@ SNIFFER_H += utils.h
 
 SNIFFER_OBJ = $(SNIFFERC:%c=%o)
 
+SNIFFERCC = bloom_filter.cc
+
 %.o: %.c %.h
 	$(CC) $(CFLAGS) -c $<
 

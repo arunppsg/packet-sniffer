@@ -13,33 +13,34 @@
 #define MAX_JSON_STRING_SIZE 65536
 #define MAX_FIELD_SIZE 65536
 #define ENTRIES_PER_LOG 10000000
-#define MAX_FILENAME_SIZE 100
 
-static long int packet_count = 0;
-static char filename[MAX_FILENAME_SIZE] = "";
-
-int write_json(const char *json, char *output_file_name){
+int write_json(const char *json, struct log_file *file){
     /*
      * Refer: https://stackoverflow.com/questions/12451431/loading-and-parsing-a-json-file-with-multiple-json-objects
      * https://datatracker.ietf.org/doc/html/rfc7159
      */
-    if(packet_count == 0){
-        time_t rawtime;
-        time(&rawtime);
-        sprintf(filename, "%s%ld.json", output_file_name, rawtime);
-    }    
-    packet_count = (packet_count + 1) % ENTRIES_PER_LOG;
     
+    file->packet_count = (++file->packet_count) % ENTRIES_PER_LOG;
+	if(file->packet_count == 0){
+		time_t rawtime;
+		time(&rawtime);
+		strcpy(file->filename, "");
+		if(file->mode == 1)
+			sprintf(file->filename, "%spkt_log%ld.json", file->dirname, rawtime);
+		else if(file->mode == 2)
+			sprintf(file->filename, "%sdup_pkt_log%ld.json", file->dirname, rawtime);
+	}
+	
     // create file if it doesn't exist
-    FILE* fp = fopen(filename, "r"); 
+    FILE* fp = fopen(file->filename, "r"); 
     if (!fp)
     {
-       fp = fopen(filename, "w"); 
+       fp = fopen(file->filename, "w"); 
     } 
     fclose(fp);
     
     // add the document to the file
-    fp = fopen(filename, "a");
+    fp = fopen(file->filename, "a");
     if (fp)
     {
         // append the document
@@ -52,7 +53,7 @@ int write_json(const char *json, char *output_file_name){
 }
 
 
-int write_packet_info(struct packet_info *pi, char *output_file_name){
+int write_packet_info(struct packet_info *pi, struct lof_file *log){
      
     char json[MAX_JSON_STRING_SIZE] = "";
     char text[MAX_FIELD_SIZE] = "";
@@ -96,14 +97,15 @@ int write_packet_info(struct packet_info *pi, char *output_file_name){
 
         sprintf(text, "\"syn\":%d, \"rst\":%d, \"fin\":%d,",
                 pi->syn, pi->rst, pi->fin);
+		strcat(json, text);
 
     }
 
     sprintf(text, "\"payload_size\":%d,", pi->payload_size);
     strcat(json, text);
 
-//    sprintf(text, "\"payload_ascii\":\"%s\",", pi->payload_ascii);
-//    strcat(json, text);
+    sprintf(text, "\"payload_ascii\":\"%s\",", pi->payload_ascii);
+    strcat(json, text);
 
     sprintf(text, "\"payload_hash\":\"%s\"}", pi->payload_hash);
     strcat(json, text);
@@ -115,4 +117,3 @@ int write_packet_info(struct packet_info *pi, char *output_file_name){
     sniffer_debug("Extracted packet details in write_packet_info \n");    
     return 0;         
 }
-
