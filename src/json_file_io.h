@@ -11,6 +11,6 @@ struct log_file {
 	int mode;
 };
 
-int write_packet_info(struct packet_info *, char *);
+int write_packet_info(struct packet_info *, struct log_file *);
 
 #endif

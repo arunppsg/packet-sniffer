@@ -3,16 +3,16 @@
 #include <string>
 #include <vector>
 #include <cmath>
-#include "xxhash64.h"
+#include <cstring>
 #include <cstdint>
 #include "bloom_filter.h"
-
+#include "xxhash64.h"
 /*
  * This program defines BloomFilter class 
  */
 
 BloomFilter::BloomFilter(){
-    memset(this, 0, sizeof( BloomFilter ));
+    //memset(this, 0, sizeof( BloomFilter ));
 //    this->m = 100000000;
 //    this->n = 10000000000;
     this->m = 10000;
@@ -51,9 +51,12 @@ int BloomFilter::write(){
     ofs << this->m << std::endl;
     ofs << this->n << std::endl;
     ofs << this->k << std::endl;
-    for(int i=0; i<this->bit_array.size(); ++i)
-        ofs << this->bit_array[i];
+    for(auto item: this->bit_array)
+        ofs << item;
+    //    for(int i=0; i<this->bit_array.size(); ++i)
+      //  ofs << this->bit_array[i];
     ofs << std::endl;
+    ofs.close();
     return 0;
 }
 
@@ -74,9 +77,10 @@ int BloomFilter::load(){
 
     this->bit_array.resize(this->m, 0);
     ifs >> line;
-    for(int i=0; i<line.length(); ++i){
+    for(unsigned int i=0; i<line.length(); ++i){
         this->bit_array[i] = (line[i] == '1');
     }
+    ifs.close();
     return 0;
 }
 
@@ -107,6 +111,8 @@ int cpp_print(BloomFilter *bf){
 
 int cpp_load(BloomFilter *bf){
     bf->load();
+    std::cout << "Successfully loaded bloom filter \n";
+    cpp_print(bf);
     return 0;
 }
 
