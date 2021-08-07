@@ -19,7 +19,6 @@ int write_json(const char *json, struct log_file *log){
      * Refer: https://stackoverflow.com/questions/12451431/loading-and-parsing-a-json-file-with-multiple-json-objects
      * https://datatracker.ietf.org/doc/html/rfc7159
      */
-    printf("In write json \n"); 
     log->pkt_count = (log->pkt_count + 1) % ENTRIES_PER_LOG;
 	if(log->pkt_count == 0){
 		time_t rawtime;
@@ -53,7 +52,8 @@ int write_json(const char *json, struct log_file *log){
 }
 
 
-int write_packet_info(struct packet_info *pi, struct log_file *log){
+int write_packet_info(struct packet_info *pi, struct log_file *log,
+        pthread_mutex_t *lock){
      
     char json[MAX_JSON_STRING_SIZE] = "";
     char text[MAX_FIELD_SIZE] = "";
@@ -112,21 +112,17 @@ int write_packet_info(struct packet_info *pi, struct log_file *log){
 
 //    printf("%s\n", json);
     int err;
-    err = pthread_mutex_lock(&file_write_lock);
+    err = pthread_mutex_lock(lock);
     if(err != 0){
         fprintf(stderr, "%s: error acquiring hash add lock\n",
                 strerror(err));
-    } else {
-        printf("Lock acquired ");
-    }
+    } 
     write_json(json, log);
-    err = pthread_mutex_unlock(&file_write_lock);
+    err = pthread_mutex_unlock(lock);
     if(err != 0){
         fprintf(stderr, "%s: error releasing file write lock\n",
                 strerror(err));
-    } else {
-        printf("Lock released ");
-    }
+    } 
     sniffer_debug("Extracted packet details in write_packet_info \n");    
     return 0;         
 }

@@ -94,6 +94,8 @@ struct stats_tracking {
     int *t_start_p;  /* Clean start predicate */
     pthread_cond_t *t_start_c; /* Clean start condition */
     pthread_mutex_t *t_start_m; /* Clean start mutex */
+    pthread_mutex_t *log_access;
+    pthread_mutex_t *bf_access;
 };
 
 /* Stores details about the thread */
@@ -113,6 +115,8 @@ struct thread_storage {
     int *t_start_p;  /* Clean start predicate */
     pthread_cond_t *t_start_c; /* Clean start condition */
     pthread_mutex_t *t_start_m;   /* Clean start mutex */
+    pthread_mutex_t *log_access;
+    pthread_mutex_t *bf_access;
 };
 
 #define RING_LIMITS_DEFAULT_FRAC 0.01
@@ -236,7 +240,7 @@ void *stats_thread_func(void *statst_arg){
         double worst_rusage = 0; /* Worst average buffer usage */
         double worst_i_rusage = 0; /* Worst instantaneous ring buffer usage */
         for(int thread = 0; thread < statst->num_threads; thread++){
-//            printf("sockfd %d\n", statst->tstor[thread].sockfd); 
+
             af_packet_stats(statst->tstor[thread].sockfd, (struct stats_tracking *)statst);
 
             int thread_block_count = statst->tstor[thread].ring_params.tp_block_nr;
@@ -395,28 +399,23 @@ void process_all_packets_in_block(struct tpacket_block_desc *block_hdr,
         sniffer_debug("%d\n", pi.is_valid);
         if (pi.is_valid) {
 			int mode = statst->mode;
-            printf("Valid packet \n");
+            
 			BloomFilter *bf = statst->bf;
 
-			write_packet_info(&pi, pkt_log);	
+			write_packet_info(&pi, pkt_log, statst->log_access);	
 			if (mode == 1) {
 				/* Add hash entry to bloom filter and log packet */	
-				err = pthread_mutex_lock(&hash_table_lock);
+				err = pthread_mutex_lock(statst->bf_access);
                 if(err != 0){
                     fprintf(stderr, "%s: error acquiring hash add lock\n",
                             strerror(err));
-                } else {
-                    printf("Lock acquired ");
-                }
+                } 
 				cpp_add(bf, (const char *)pi.payload_hash); 
-                err = pthread_mutex_unlock(&hash_table_lock);
+                err = pthread_mutex_unlock(statst->bf_access);
                 if(err != 0){
                     fprintf(stderr, "%s: error releasing hash add lock\n",
                             strerror(err));
-                } else 
-                    printf("Lock released ");
-
-
+                } 
 			} else if (mode == 2) {
 				/* Add log entry to test file.
 				 * Check whether hash entry is present. If not, write to 
@@ -425,13 +424,14 @@ void process_all_packets_in_block(struct tpacket_block_desc *block_hdr,
 				/* TODO
 				 * Ideally the lock here is not needed because this operation only
 				 * requires read from the bloom filter */
-				pthread_mutex_lock(&hash_table_lock);
+				pthread_mutex_lock(statst->bf_access);
 				int result = cpp_check(bf, (const char *)pi.payload_hash);
-				pthread_mutex_unlock(&hash_table_lock);
+				pthread_mutex_unlock(statst->bf_access); 
 
 				if (result == 1) {
 					/* Hash is found in the table - a dup packet */
-					write_packet_info(&pi, dup_pkt_log);	
+                    printf("Duplicate packet \n");
+					write_packet_info(&pi, dup_pkt_log, statst->log_access);	
 				} 
 			} 
         }
@@ -557,16 +557,16 @@ int af_packet_rx_ring_fanout_capture(struct thread_storage *thread_stor){
      struct timespec ts;
      (void)time_elapsed(&ts); /* Initializes ts with current time */
      double time_d; /* time delta */
-     printf("sig close workers %d\n", sig_close_workers);
+
      while(sig_close_workers == 0){
         /* Check whether the 'user' bit is set or not on the block. 
          * If the bit is set, the block has been filled by the kernel and
          * now we should process the block. Otherwise, the block is still owned 
          * by the kernel and we should wait.
          */
-         printf("Inside whilre \n");
+
          if((block_header[cb]->hdr.bh1.block_status & TP_STATUS_USER) == 0){
-             printf("while if start \n");
+
              /*This branch is for 'user' bit not set meaning the kernel is 
               * still filling up the block with new packets */
 
@@ -576,23 +576,21 @@ int af_packet_rx_ring_fanout_capture(struct thread_storage *thread_stor){
              if(bstreak > thread_block_count){
                  bstreak = thread_block_count;
              }
-            printf("Going to acquire bstreak locks \n");
+
              /* TODO Is mutex lock really needed or can it be skipped? */
              err = pthread_mutex_lock(bstreak_m);
              if(err != 0){
                  fprintf(stderr, "%s: error acquiring bstreak mutex lock \n", strerror(err));
                  exit(255);
-             } else 
-                 printf("acquired bstreak mutex lock \n"); 
+             } 
 
              block_streak_hist[bstreak] += time_d;
              err = pthread_mutex_unlock(bstreak_m);
              if(err != 0){
                  fprintf(stderr, "%s: error releasing bstreak mutex unlock \n", strerror(err));
                  exit(255);
-             } else
-                 printf("released bstread mutex lock \n");
-             printf("Released bstreak lock \n");
+             } 
+
              bstreak = 0;
 
              /* If poll() has returned but we haven't found any data .. */
@@ -618,15 +616,14 @@ int af_packet_rx_ring_fanout_capture(struct thread_storage *thread_stor){
              } else {
                 pstreak++;
              }
-             printf("while if end \n");
+             
          } else {
-             printf("while else start \n");
+             
              /* In this branch, the bit is set meaning the kernel has filled this block 
               * and returned it to us for processing */
              bstreak++;
 
-             /* We found data. Process it */
-             printf("Going to process block packets \n");
+             /* We found data. Process it */ 
              process_all_packets_in_block(block_header[cb], statst); 
              
              /* Reset accounting */
@@ -637,7 +634,7 @@ int af_packet_rx_ring_fanout_capture(struct thread_storage *thread_stor){
 
              cb += 1;
              cb = cb % thread_block_count;
-             printf("while else end \n");
+             
          }
      } /* End of while */
      fprintf(stderr, "Thread %d with thread id %lu exiting \n",
@@ -805,6 +802,8 @@ enum status bind_and_dispatch(struct sniffer_config *cfg){
     int t_start_p = 0;
     pthread_cond_t t_start_c = PTHREAD_COND_INITIALIZER;
     pthread_mutex_t t_start_m = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_t log_access = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_t bf_access = PTHREAD_MUTEX_INITIALIZER;
 
     struct stats_tracking statst;
     memset(&statst, 0, sizeof(statst));
@@ -812,15 +811,13 @@ enum status bind_and_dispatch(struct sniffer_config *cfg){
     statst.t_start_p = &t_start_p;
     statst.t_start_c = &t_start_c;
     statst.t_start_m = &t_start_m;
+    statst.log_access = &log_access;
+    statst.bf_access = &bf_access;
     if(cfg->verbosity == 1){
         statst.verbosity = 1;
     }
+
     statst.mode = cfg->mode;
-    BloomFilter *bf = cpp_create_bloom_filter();
-    if(!bf){
-        perror("could not allocate memory for bloom filter\n");
-        exit(255);
-    }
 
     statst.pkt_log = (struct log_file *)malloc(sizeof(struct log_file));
 	memset(statst.pkt_log, 0, sizeof(struct log_file));
@@ -832,24 +829,27 @@ enum status bind_and_dispatch(struct sniffer_config *cfg){
 	sprintf(statst.pkt_log->filename, "%slog%ld.json", statst.pkt_log->dirname, rawtime);
 	statst.pkt_log->mode = 1;
 
-    if (statst.mode == 0 || statst.mode == 1){
-        /* Do nothing with bloom filter or 
-		Build hash table */
-		statst.dup_pkt_log = NULL;	
+	statst.dup_pkt_log = (struct log_file *)malloc(sizeof(struct log_file));
+	memset(statst.dup_pkt_log, 0, sizeof(struct log_file));
+	statst.dup_pkt_log->pkt_count = 0;
+	strcpy(statst.dup_pkt_log->dirname, cfg->logdir);
+	strcpy(statst.dup_pkt_log->filename, "");
+	sprintf(statst.dup_pkt_log->filename, "%sdup_pkt_log%ld.json", 
+			statst.dup_pkt_log->dirname, rawtime);
+	statst.dup_pkt_log->mode = 2;
+    printf("Intialized duplicate log file. \nfilename: %s directory name: %s mode: %d \n",
+           statst.dup_pkt_log->filename, statst.dup_pkt_log->dirname, statst.dup_pkt_log->mode);
+
+    BloomFilter *bf = cpp_create_bloom_filter();
+    if(!bf){
+        perror("could not allocate memory for bloom filter\n");
+        exit(255);
     }
-    else if (statst.mode == 2){
-        /* Perform detection */
+    
+    if (statst.mode == 2){
+        /* Perform detection */ 
 		cpp_load(bf);
-		statst.dup_pkt_log = (struct log_file *)malloc(sizeof(struct log_file));
-		memset(statst.dup_pkt_log, 0, sizeof(struct log_file));
-		statst.dup_pkt_log->pkt_count = 0;
-		strcpy(statst.dup_pkt_log->dirname, cfg->logdir);
-		strcpy(statst.dup_pkt_log->filename, "");
-		sprintf(statst.dup_pkt_log->filename, "%sdup_pkt_log%ld.json", 
-				statst.dup_pkt_log->dirname, rawtime);
-		statst.dup_pkt_log->mode = 2;
-        printf("Intialized duplicate log file. \nfilename: %s directory name: %s mode: %d \n",
-                statst.dup_pkt_log->filename, statst.dup_pkt_log->dirname, statst.dup_pkt_log->mode);
+        printf("Loaded bloom filter ");
     } 
         
     statst.bf = bf;
@@ -920,6 +920,8 @@ enum status bind_and_dispatch(struct sniffer_config *cfg){
         tstor[thread].t_start_p = &t_start_p;
         tstor[thread].t_start_c = &t_start_c;
         tstor[thread].t_start_m = &t_start_m;
+        tstor[thread].log_access = &log_access;
+        tstor[thread].bf_access = &bf_access;
 
         err = pthread_attr_init(&(tstor[thread].thread_attributes));
         if (err){
@@ -1034,7 +1036,12 @@ enum status bind_and_dispatch(struct sniffer_config *cfg){
   
 	if(statst.mode == 1){
 		/* Write bloom filter */
-		cpp_write(bf);
+        cpp_write(bf);
+/*	    FILE *fp = fopen("bloomfilter.data", "wb");
+        if(fp != NULL){
+            fwrite(bf, bloom_filter_size(), 1, fp);
+            fclose(fp);
+        }    */
 	}
 
     /* Control reaches here only if interrupt is pressed 

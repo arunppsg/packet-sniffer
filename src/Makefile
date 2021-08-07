@@ -75,4 +75,6 @@ clean:
 	rm -f *.o *.json
 
 clean-json:
+	cd output
 	rm -f *.json
+	cd ~

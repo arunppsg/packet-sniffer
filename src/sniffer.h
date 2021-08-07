@@ -35,7 +35,7 @@ struct sniffer_config{
 };
 
 
-#define sniffer_config_init() { (char *)"wlp3s0", (char *)"output", 0, 1, 0, 0.1, 0}
+#define sniffer_config_init() { (char *)"wlp3s0", (char *)"output/", 0, 1, 0, 0.1, 0}
 
 struct packet_info {
     struct timespec ts;
