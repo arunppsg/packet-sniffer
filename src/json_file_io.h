@@ -11,7 +11,7 @@ struct log_file {
 	int mode;
 };
 
-int write_packet_info(struct packet_info *, struct log_file *,
-        pthread_mutex_t *);
+int write_packet_info(struct packet_info *, int, 
+        struct log_file *, pthread_mutex_t *);
 
 #endif

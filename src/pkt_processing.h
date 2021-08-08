@@ -8,6 +8,6 @@
 #define IP_HEADER_LEN 20 
 #define UDP_HEADER_LEN 8
 
-int extract_packet_info(uint8_t *eth, struct packet_info *pi);
+int parse_packet(uint8_t *eth, struct packet_info *pi);
 
 #endif

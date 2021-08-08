@@ -3,6 +3,9 @@ src/*.o
 src/*.a
 src/*.json
 src/output/
+src/tmp/
+src/test/
+src/*.data
 
 analysis/*.json
 analysis/tmp/
@@ -13,8 +16,6 @@ analysis/results.csv
 
 tmp/
 test/
-src/tmp/
-stc/test/
 tests/tmp
 tests/*.out
 tests/test.o

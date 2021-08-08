@@ -13,6 +13,7 @@ CFLAGS  += -lcrypto # for sha512.h
 CFLAGS  += -lpthread # for pthread.h
 CFLAGS  += -Wall
 CFLAGS  += -g
+CFLAGS += -ggdb3
 #CFLAGS 	+= -DDEBUG
 
 SNIFFERC  =  sniffer.c
