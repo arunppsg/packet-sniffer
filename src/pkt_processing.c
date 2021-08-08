@@ -18,7 +18,7 @@
 #include "pkt_processing.h"
 
 void ascii_hex_dump(const char *payload, int payload_size,
-         unsigned char *ascii_dump, unsigned char *hexa_dump){
+         unsigned char *ascii_dump){
     sniffer_debug("Getting ascii of payload..  ");
     unsigned char byte;
     int i;
@@ -33,30 +33,19 @@ void ascii_hex_dump(const char *payload, int payload_size,
             break;
     }
     
-    /* If the below loop statement is placed inside above loop, it returns an 
-     * empty string. Not sure why it happens.
-     * Also it raises segmentation fault in some cases.
-     * Again, not sure why it is happening and hence it is left unused.
-     * TODO resolve using gdb
-
-    for(i=0; i<payload_size; i++){
-        byte = payload[i];
-        sprintf(hexa_dump + i*2, "%02x", byte);
-    }*/
     sniffer_debug("Got payload ascii\n");
 }
 
-void extract_tcp_packet(uint8_t *eth, u_short iphdr_len,
+char* parse_tcp_packet(uint8_t *eth, u_short iphdr_len,
          struct packet_info *pi){
     /*
      * Reference docs: https://datatracker.ietf.org/doc/html/rfc793 
      */
     sniffer_debug("Extracting TCP packet.. "); 
     struct tcphdr *tcph = (struct tcphdr *)(eth + ETH_HLEN + iphdr_len);
-    const char *payload;
     int tcphdr_len = (unsigned int)tcph->doff * 4;
     if(tcphdr_len < 20){  // Invalid TCP Header. Min. size of tcp header = 5 words = 20 bytes
-        return;
+        return NULL;
     }
     pi->sport = ntohs(tcph->source);
     pi->dport = ntohs(tcph->dest);
@@ -73,51 +62,33 @@ void extract_tcp_packet(uint8_t *eth, u_short iphdr_len,
     pi->rst = tcph->rst;
     pi->fin = tcph->fin;
     
-    payload = (const char *)(eth + SIZE_ETHERNET + iphdr_len + tcphdr_len);
-    //int payload_size = pi->ip_len - (iphdr_len + tcphdr_len);
-    int payload_size = strlen(payload); 
-    if(payload_size > 3){
-        sha512(payload, pi->payload_hash);
-        pi->is_valid = 1;
-        pi->payload_size = payload_size; 
-        ascii_hex_dump(payload, payload_size,
-                pi->payload_ascii, pi->payload_hexa); 
-   } 
-   sniffer_debug("Extracted tcp\n");
-   return;
+    char *payload = (char *)(eth + SIZE_ETHERNET + iphdr_len + tcphdr_len);
+    sniffer_debug("Extracted tcp\n");
+    return payload;
 }
 
 
-void extract_udp_packet(uint8_t *eth, u_short iphdr_len,
+char* parse_udp_packet(uint8_t *eth, u_short iphdr_len,
         struct packet_info *pi){
     /*
      * Reference docs: https://datatracker.ietf.org/doc/html/rfc768
      */
     sniffer_debug("Extracting UDP packet..  ");
     struct udphdr *udph = (struct udphdr *)(eth + ETH_HLEN + iphdr_len);
-    const char *payload;
-    payload = (const char *)(eth + SIZE_ETHERNET + iphdr_len + UDP_HEADER_LEN);
-    //int payload_size = ntohs(udph->len) - UDP_HEADER_LEN;
-    int payload_size = strlen(payload);
-    if(payload_size > 3){
-        sha512(payload, pi->payload_hash);
-        pi->is_valid = 1;
-        pi->payload_size = payload_size; 
-        ascii_hex_dump(payload, payload_size,
-                pi->payload_ascii, pi->payload_hexa); 
-    }
+    pi->sport = ntohs(udph->source);
+    pi->dport = ntohs(udph->dest);
+    char *payload = (char *)(eth + SIZE_ETHERNET + iphdr_len + UDP_HEADER_LEN);
     sniffer_debug("Extracted\n"); 
-    return;
+    return payload;
 }
 
-int extract_packet_info(uint8_t *eth, struct packet_info *pi){
+int parse_packet(uint8_t *eth, struct packet_info *pi){
     /*
      * Reference docs: https://datatracker.ietf.org/doc/html/rfc791
      */
     sniffer_debug("Extracting IP packet.. ");
     pi->is_valid = 0;
     struct iphdr *iph = (struct iphdr *)(eth + ETH_HLEN);
-//    if(eth->h_proto == htons(ETH_P_IP)){ TODO Is this check needed?
         /* We determine IP protocol. IPv4 and IPv6 has different header structures */
         if(iph->version == 4){
             u_short iphdr_len = iph->ihl * 4; // ip->iphl contains the header len in words. 1 word = 4 octet.
@@ -133,20 +104,33 @@ int extract_packet_info(uint8_t *eth, struct packet_info *pi){
             pi->ip_len = ntohs(iph->tot_len);
 //            pi->identification = ntohs(iph->id);
             sniffer_debug("Extracted IP info\n");
+            char *payload;
             switch(pi->protocol){
                 case IPPROTO_TCP:
-                    extract_tcp_packet(eth, iphdr_len, pi);
+                    payload = parse_tcp_packet(eth, iphdr_len, pi);
                     break;
                 case IPPROTO_UDP:
-                    extract_udp_packet(eth, iphdr_len, pi);
+                    payload = parse_udp_packet(eth, iphdr_len, pi);
                     break;
+                default:
+                    pi->is_valid = 0;
+                    return 0;
             }
+            if(!payload)
+               return 0; 
+            int payload_size = strlen(payload);
+            if(payload_size > 3){
+                strcpy((char *)pi->payload_hash, "");
+                sha512(payload, pi->payload_hash);
+                pi->is_valid = 1;
+                pi->payload_size = payload_size; 
+                ascii_hex_dump(payload, payload_size,
+                        pi->payload_ascii); 
+            }
+
         } else {  // Not collecting IPv6
             pi->is_valid = 0;
         }
-/*    } else {  // Not an IP packet
-        pi->is_valid = 0;
-    }*/
     sniffer_debug("Extracted IP packet\n");
     return 0;
 }

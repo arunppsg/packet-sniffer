@@ -14,11 +14,10 @@
 
 
 BloomFilter::BloomFilter(){
-    //memset(this, 0, sizeof( BloomFilter ));
-//    this->m = 100000000;
-//    this->n = 10000000000;
-    this->m = 100;
-    this->n = 10000; 
+    //this->m = 100000000;
+    //this->n = 1000000000000;
+    this->m = 100000000;
+    this->n = 100000000;
     this->k = this->get_optimal_k();
     this->bit_array = new bool[this->n];
     for(int i=0; i<this->n; ++i)
@@ -44,10 +43,6 @@ int BloomFilter::add(std::string message){
 }
 
 int BloomFilter::write(){
-    /*std::ofstream ofs("bloomfilter.data");
-    for(auto item: this->bit_array)
-        ofs << item;
-    ofs.close();*/
     FILE *fp = fopen("bloomfilter.data", "wb");
     fwrite(this->bit_array, sizeof(bool), sizeof(this->bit_array), fp);
     fclose(fp);
@@ -56,14 +51,6 @@ int BloomFilter::write(){
 }
 
 int BloomFilter::load(){
-    /*std::ifstream ifs("bloomfilter.data");
-    std::string line = "";
-    ifs >> line; 
-    for(unsigned int i=0; i<line.length(); ++i){
-        this->bit_array[i] = (line[i] == '1');
-    }
-    ifs.close();
-    */
     FILE *fp = fopen("bloomfilter.data", "rb");
     fread(this->bit_array, sizeof(bool), sizeof(this->bit_array), fp);
     fclose(fp);

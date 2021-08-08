@@ -142,15 +142,17 @@ void ring_limits_init(struct ring_limits *rl, float frac){
     /* Don't change following parameters without good reason */
     rl->af_ring_limit      = 0xffffffff; /* setsockopt() can't allocate more than this so don't try */
     rl->af_framesize       = 2 * (1 << 10); /* default frame size: 2 KiB. */
-    rl->af_blocksize       = 4 * (1 << 20); /* 4 MiB. (must be a multiple of af_framesize) */
+    //rl->af_blocksize       = 4 * (1 << 20); /* 4 MiB. (must be a multiple of af_framesize) */
     rl->af_min_blocksize   = 64 * (1 << 10); /* 64 KiB */
-    rl->af_target_blocks   = 64;
+    //rl->af_target_blocks   = 64;
     rl->af_min_blocks      = 8;
     rl->af_blocktimeout    = 100;   /* milliseconds before a block is returned partially full */
     rl->af_fanout_type     = PACKET_FANOUT_LB;  /* PACKET_FANOUT_LB implements a round robin
                                                    algorithm for spreading traffic across sockets.
                                                   Since our case is only to capture packet, this can help
                                                   in load balanding of traffic */
+    rl->af_blocksize       = 256 * (1 << 20);
+    rl->af_target_blocks   = 32;
     sniffer_debug("Initalized ring\n");
 }
 
@@ -358,21 +360,32 @@ void *stats_thread_func(void *statst_arg){
     return NULL; 
 }
 
-void process_all_packets_in_block(struct tpacket_block_desc *block_hdr, 
+int process_all_packets_in_block(struct tpacket_block_desc *block_hdr, 
         struct stats_tracking *statst){
-	/* TODO
-	 * The output file name should vary with respect to mode
-	 */
     int err;
     sniffer_debug("Processing packets in a block\n");
     int num_pkts = block_hdr->hdr.bh1.num_pkts, i;
     unsigned long byte_count = 0; 
+    if (num_pkts < 1){
+        return 0;
+    }
+
 	struct log_file *pkt_log = statst->pkt_log;
 	struct log_file *dup_pkt_log = statst->dup_pkt_log;
+	int mode = statst->mode;        
+	BloomFilter *bf = statst->bf;
+
 	struct tpacket3_hdr *pkt_hdr;
     pkt_hdr = (struct tpacket3_hdr *) ((uint8_t *) block_hdr + block_hdr->hdr.bh1.offset_to_first_pkt);
+	
+	struct packet_info *pi = (struct packet_info *)malloc((num_pkts)* sizeof(struct packet_info));
+    memset(pi, 0, num_pkts * sizeof(struct packet_info));
+//	struct packet_info *pi = (struct packet_info *)malloc((num_pkts + 1)* sizeof(struct packet_info));
+    if(!pi){
+        perror("could not allocate memory");
+    }
+
     for (i = 0; i < num_pkts; ++i) {
-        struct packet_info pi;
         /* The tp_snaplen value is the actual number of bytes of this packet
          * that made it into the ringbuffer block. A packet can be of any size. The
          * tp_snaplen field says that actual size of packet which gets captured in that
@@ -384,67 +397,63 @@ void process_all_packets_in_block(struct tpacket_block_desc *block_hdr,
         byte_count += pkt_hdr->tp_snaplen;
   
           /* Grab the times */
-        pi.ts.tv_sec = pkt_hdr->tp_sec;
-        pi.ts.tv_nsec = pkt_hdr->tp_nsec;
+        pi[i].ts.tv_sec = pkt_hdr->tp_sec;
+        pi[i].ts.tv_nsec = pkt_hdr->tp_nsec;
   
-        pi.caplen = pkt_hdr->tp_snaplen;
-        pi.len = pkt_hdr->tp_len;
-        pi.is_valid = 0;
+        pi[i].caplen = pkt_hdr->tp_snaplen;
+        pi[i].len = pkt_hdr->tp_len;
+        pi[i].is_valid = 0;
   
-        uint8_t *eth = (uint8_t*)pkt_hdr + pkt_hdr->tp_mac;
-        sniffer_debug("Going for extracting packet info \n");
-        extract_packet_info(eth, &pi);
-        sniffer_debug("Finished extracting packet info \n");
-        sniffer_debug("Printing packet valid : ");
-        sniffer_debug("%d\n", pi.is_valid);
-        if (pi.is_valid) {
-			int mode = statst->mode;
-            
-			BloomFilter *bf = statst->bf;
+        uint8_t *eth = (uint8_t*)pkt_hdr + pkt_hdr->tp_mac; 
+        parse_packet(eth, &(pi[i]));
+		if(mode == 1){	
+			/* Add hash entry to bloom filter and log packet */	
+			err = pthread_mutex_lock(statst->bf_access);
+	        if(err != 0){
+	            fprintf(stderr, "%s: error acquiring hash add lock\n",
+	                    strerror(err));
+	        } 
+			if(pi[i].is_valid)
+				cpp_add(bf, (const char *)pi[i].payload_hash);
+	        err = pthread_mutex_unlock(statst->bf_access);
+	        if(err != 0){
+	            fprintf(stderr, "%s: error releasing hash add lock\n",
+	                    strerror(err));
+	        } 
+		} else if(mode == 2){
 
-			write_packet_info(&pi, pkt_log, statst->log_access);	
-			if (mode == 1) {
-				/* Add hash entry to bloom filter and log packet */	
-				err = pthread_mutex_lock(statst->bf_access);
-                if(err != 0){
-                    fprintf(stderr, "%s: error acquiring hash add lock\n",
-                            strerror(err));
-                } 
-				cpp_add(bf, (const char *)pi.payload_hash); 
-                err = pthread_mutex_unlock(statst->bf_access);
-                if(err != 0){
-                    fprintf(stderr, "%s: error releasing hash add lock\n",
-                            strerror(err));
-                } 
-			} else if (mode == 2) {
-				/* Add log entry to test file.
-				 * Check whether hash entry is present. If not, write to 
-				 * a seperate log file.  */
+			/* Add log entry to test file.
+			* Check whether hash entry is present. If not, write to 
+			* a seperate log file. */
 
-				/* TODO
-				 * Ideally the lock here is not needed because this operation only
-				 * requires read from the bloom filter */
-				pthread_mutex_lock(statst->bf_access);
-				int result = cpp_check(bf, (const char *)pi.payload_hash);
+			/* TODO
+			* Ideally the lock here is not needed because this operation only
+			* requires read from the bloom filter */
+			if(pi[i].is_valid){
+				pthread_mutex_lock(statst->bf_access);		
+				int result = cpp_check(bf, (const char *)pi[i].payload_hash);
 				pthread_mutex_unlock(statst->bf_access); 
-
+				
 				if (result == 1) {
 					/* Hash is found in the table - a dup packet */
-                    printf("Duplicate packet \n");
-					write_packet_info(&pi, dup_pkt_log, statst->log_access);	
-				} 
+					write_packet_info(&(pi[i]), 1, dup_pkt_log, statst->log_access);
+				}
 			} 
-        }
-		
-        sniffer_debug("Going to point next packet header \n");
-        pkt_hdr = (struct tpacket3_hdr *) ((uint8_t *)pkt_hdr + pkt_hdr->tp_next_offset);
-        sniffer_debug("Pointer to next packet header \n");
-    }
+		}
+		sniffer_debug("Going to point next packet header \n");
+		pkt_hdr = (struct tpacket3_hdr *) ((uint8_t *)pkt_hdr + pkt_hdr->tp_next_offset);
+			
+	}
+ 	
+	write_packet_info(pi, num_pkts, pkt_log, statst->log_access);
+    free(pi);
+    pi = NULL;
+
     sniffer_debug("Ending processing of packets\n");
     
     __sync_add_and_fetch(&(statst->received_packets), num_pkts);
     __sync_add_and_fetch(&(statst->received_bytes), byte_count);
- 
+    return 0; 
 }
 
 int af_packet_rx_ring_fanout_capture(struct thread_storage *thread_stor){
@@ -829,17 +838,6 @@ enum status bind_and_dispatch(struct sniffer_config *cfg){
 	sprintf(statst.pkt_log->filename, "%slog%ld.json", statst.pkt_log->dirname, rawtime);
 	statst.pkt_log->mode = 1;
 
-	statst.dup_pkt_log = (struct log_file *)malloc(sizeof(struct log_file));
-	memset(statst.dup_pkt_log, 0, sizeof(struct log_file));
-	statst.dup_pkt_log->pkt_count = 0;
-	strcpy(statst.dup_pkt_log->dirname, cfg->logdir);
-	strcpy(statst.dup_pkt_log->filename, "");
-	sprintf(statst.dup_pkt_log->filename, "%sdup_pkt_log%ld.json", 
-			statst.dup_pkt_log->dirname, rawtime);
-	statst.dup_pkt_log->mode = 2;
-    printf("Intialized duplicate log file. \nfilename: %s directory name: %s mode: %d \n",
-           statst.dup_pkt_log->filename, statst.dup_pkt_log->dirname, statst.dup_pkt_log->mode);
-
     BloomFilter *bf = cpp_create_bloom_filter();
     if(!bf){
         perror("could not allocate memory for bloom filter\n");
@@ -848,10 +846,23 @@ enum status bind_and_dispatch(struct sniffer_config *cfg){
     
     if (statst.mode == 2){
         /* Perform detection */ 
+    	statst.dup_pkt_log = (struct log_file *)malloc(sizeof(struct log_file));
+    	memset(statst.dup_pkt_log, 0, sizeof(struct log_file));
+    	statst.dup_pkt_log->pkt_count = 0;
+    	strcpy(statst.dup_pkt_log->dirname, cfg->logdir);
+    	strcpy(statst.dup_pkt_log->filename, "");
+    	sprintf(statst.dup_pkt_log->filename, "%sdup_pkt_log%ld.json", 
+    			statst.dup_pkt_log->dirname, rawtime);
+    	statst.dup_pkt_log->mode = 2;
+        printf("Intialized duplicate log file. \nfilename: %s directory name: %s mode: %d \n",
+               statst.dup_pkt_log->filename, statst.dup_pkt_log->dirname, statst.dup_pkt_log->mode);
 		cpp_load(bf);
         printf("Loaded bloom filter ");
+    } else if(statst.mode == 1 || statst.mode == 0){
+        // No duplicate packet detection
+        statst.dup_pkt_log = NULL;
     } 
-        
+ 
     statst.bf = bf;
 	
     struct thread_storage *tstor; // pointer to array of struct thread_storage, one for each thread 
@@ -959,10 +970,9 @@ enum status bind_and_dispatch(struct sniffer_config *cfg){
     int timeout_time = cfg->time_delta;
     if(timeout_time > 0){
         pthread_attr_t attr;
-        int err;
         err = pthread_attr_init(&attr);
         if(err != 0)
-            fprintf(stderr, "Error occured in initializing thread attributes \n");
+            fprintf(stderr, "Error occured in initializing timer thread attributes \n");
         pthread_create(&timer_thread, &attr, track_time, &timeout_time);
     }
     
@@ -1026,6 +1036,16 @@ enum status bind_and_dispatch(struct sniffer_config *cfg){
     printf("Closed all threads \n");
     sniffer_debug("Closed all threads. Printing packet statistics\n");
 
+    free(statst.pkt_log);
+    if(statst.mode == 2){
+        free(statst.dup_pkt_log);
+    }
+
+	if(statst.mode == 1){
+		/* Write bloom filter */
+        cpp_write(bf); 
+	}
+
     fprintf(stderr, "--\n"
       "%" PRIu64 " packets captured\n"
       "%" PRIu64 " bytes captured\n"
@@ -1034,16 +1054,6 @@ enum status bind_and_dispatch(struct sniffer_config *cfg){
       "%" PRIu64 " socket queue freezes\n",
       statst.received_packets, statst.received_bytes, statst.socket_packets, statst.socket_drops, statst.socket_freezes);
   
-	if(statst.mode == 1){
-		/* Write bloom filter */
-        cpp_write(bf);
-/*	    FILE *fp = fopen("bloomfilter.data", "wb");
-        if(fp != NULL){
-            fwrite(bf, bloom_filter_size(), 1, fp);
-            fclose(fp);
-        }    */
-	}
-
     /* Control reaches here only if interrupt is pressed 
      * before timeout */ 
     if(timeout_time > 0){
