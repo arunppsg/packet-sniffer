@@ -27,8 +27,10 @@ Example Usage: \n\
         ./sniffer.o -T 2 \n\
     For capturing upto 10 seconds: \n\
         ./sniffer.o -t 10 \n\
+	For choosing output buffer size: \n\
+		./sniffer.o -b 20 \n\
     For choosing output directory (file path should be complete path): \n\
-        ./sniffer.o -j /Users/Alice/ \n\
+        ./sniffer.o -d /Users/Alice/ \n\
     For choosing capture mode: \n\
         Mode can be 0, 1 or 2. 0 generates only log files \n\
         1 builds bloom filter. 2 applies the built bloom filter \n\
@@ -43,20 +45,21 @@ int main(int argc, char *argv[]){
     struct sniffer_config cfg = sniffer_config_init(); 
     int c;
     while(1){
-        enum opt {capture_interface=1, json_file=2,
-            time=3, thread_count=4, mode=5, 
+        enum opt {capture_interface=1, dir_name=2,
+            time=3, thread_count=4, mode=5, buffer=7,
             verbosity=6, help=5 };
         int option_index = 0;
         static struct option long_options[] = {
             {"capture_interface", optional_argument, 0, 'c'},
-            {"json_file", optional_argument, 0, 'j'},
+            {"dir_name", optional_argument, 0, 'd'},
             {"time", optional_argument, 0, 't'},
             {"thread_count", optional_argument, 0, 'T'},
+			{"buffer_size", optinal_argument, 0, 'b'},
             {"mode", optional_argument, 0, 'm'},
             {"help", no_argument, 0, 'h'},
             {"verbosity", no_argument, 0, 'v'}, 
         };
-        c = getopt_long(argc, argv, "c:j:T:t:m:h:v",
+        c = getopt_long(argc, argv, "c:d:T:t:m:b:h:v",
                 long_options, &option_index);
 
         if(c == -1)  /* end of options */
@@ -67,7 +70,7 @@ int main(int argc, char *argv[]){
                 cfg.capture_interface = optarg;
                 sniffer_debug("Capture interface is %s\n", cfg.capture_interface);
                 break;
-            case 'j':
+            case 'd':
                 cfg.logdir = optarg;
                 sniffer_debug("Log directory %s\n", cfg.logdir);
                 break;
@@ -77,6 +80,9 @@ int main(int argc, char *argv[]){
             case 'T':
                 cfg.num_threads = strtol(optarg, NULL, 10);
                 break;
+			case 'b':
+				cfg.buffer_size = strtol(optarg, NULL, 10);
+				break;
             case 'v':
                 cfg.verbosity = 1;
                 break;

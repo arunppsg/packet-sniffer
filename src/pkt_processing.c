@@ -110,7 +110,7 @@ void extract_udp_packet(uint8_t *eth, u_short iphdr_len,
     return;
 }
 
-int extract_packet_info(uint8_t *eth, struct packet_info *pi){
+int parse_packet(uint8_t *eth, struct packet_info *pi){
     /*
      * Reference docs: https://datatracker.ietf.org/doc/html/rfc791
      */

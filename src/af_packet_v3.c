@@ -367,12 +367,19 @@ void process_all_packets_in_block(struct tpacket_block_desc *block_hdr,
     sniffer_debug("Processing packets in a block\n");
     int num_pkts = block_hdr->hdr.bh1.num_pkts, i;
     unsigned long byte_count = 0; 
+
 	struct log_file *pkt_log = statst->pkt_log;
 	struct log_file *dup_pkt_log = statst->dup_pkt_log;
+	int mode = statst->mode;        
+	BloomFilter *bf = statst->bf;
+
 	struct tpacket3_hdr *pkt_hdr;
     pkt_hdr = (struct tpacket3_hdr *) ((uint8_t *) block_hdr + block_hdr->hdr.bh1.offset_to_first_pkt);
+	printf("Number of packets in block %d\n", num_pkts);;
+	struct packet_info *pi = (struct packet_info *)malloc(num_pkts * sizeof(struct packet_info));
+	memset(pi, 0, num_pkts * sizeof(struct packet_info));
+
     for (i = 0; i < num_pkts; ++i) {
-        struct packet_info pi;
         /* The tp_snaplen value is the actual number of bytes of this packet
          * that made it into the ringbuffer block. A packet can be of any size. The
          * tp_snaplen field says that actual size of packet which gets captured in that
@@ -384,62 +391,57 @@ void process_all_packets_in_block(struct tpacket_block_desc *block_hdr,
         byte_count += pkt_hdr->tp_snaplen;
   
           /* Grab the times */
-        pi.ts.tv_sec = pkt_hdr->tp_sec;
-        pi.ts.tv_nsec = pkt_hdr->tp_nsec;
+        pi[i].ts.tv_sec = pkt_hdr->tp_sec;
+        pi[i].ts.tv_nsec = pkt_hdr->tp_nsec;
   
-        pi.caplen = pkt_hdr->tp_snaplen;
-        pi.len = pkt_hdr->tp_len;
-        pi.is_valid = 0;
+        pi[i].caplen = pkt_hdr->tp_snaplen;
+        pi[i].len = pkt_hdr->tp_len;
+        pi[i].is_valid = 0;
   
-        uint8_t *eth = (uint8_t*)pkt_hdr + pkt_hdr->tp_mac;
-        sniffer_debug("Going for extracting packet info \n");
-        extract_packet_info(eth, &pi);
-        sniffer_debug("Finished extracting packet info \n");
-        sniffer_debug("Printing packet valid : ");
-        sniffer_debug("%d\n", pi.is_valid);
-        if (pi.is_valid) {
-			int mode = statst->mode;
-            
-			BloomFilter *bf = statst->bf;
+        uint8_t *eth = (uint8_t*)pkt_hdr + pkt_hdr->tp_mac; 
+        parse_packet(eth, &(pi[i]));
+		if(mode == 1){	
+			/* Add hash entry to bloom filter and log packet */	
+			err = pthread_mutex_lock(statst->bf_access);
+	        if(err != 0){
+	            fprintf(stderr, "%s: error acquiring hash add lock\n",
+	                    strerror(err));
+	        } 
+			if(pi[i].is_valid)
+				cpp_add(bf, (const char *)pi[i].payload_hash);
+	        err = pthread_mutex_unlock(statst->bf_access);
+	        if(err != 0){
+	            fprintf(stderr, "%s: error releasing hash add lock\n",
+	                    strerror(err));
+	        } 
+		} else if(mode == 2){
 
-			write_packet_info(&pi, pkt_log, statst->log_access);	
-			if (mode == 1) {
-				/* Add hash entry to bloom filter and log packet */	
-				err = pthread_mutex_lock(statst->bf_access);
-                if(err != 0){
-                    fprintf(stderr, "%s: error acquiring hash add lock\n",
-                            strerror(err));
-                } 
-				cpp_add(bf, (const char *)pi.payload_hash); 
-                err = pthread_mutex_unlock(statst->bf_access);
-                if(err != 0){
-                    fprintf(stderr, "%s: error releasing hash add lock\n",
-                            strerror(err));
-                } 
-			} else if (mode == 2) {
-				/* Add log entry to test file.
-				 * Check whether hash entry is present. If not, write to 
-				 * a seperate log file.  */
+			/* Add log entry to test file.
+			* Check whether hash entry is present. If not, write to 
+			* a seperate log file. */
 
-				/* TODO
-				 * Ideally the lock here is not needed because this operation only
-				 * requires read from the bloom filter */
-				pthread_mutex_lock(statst->bf_access);
-				int result = cpp_check(bf, (const char *)pi.payload_hash);
+			/* TODO
+			* Ideally the lock here is not needed because this operation only
+			* requires read from the bloom filter */
+			if(pi[i].is_valid){		
+				pthread_mutex_lock(statst->bf_access);		
+				int result = cpp_check(bf, (const char *)pi[i].payload_hash);
 				pthread_mutex_unlock(statst->bf_access); 
-
+				
 				if (result == 1) {
 					/* Hash is found in the table - a dup packet */
-                    printf("Duplicate packet \n");
-					write_packet_info(&pi, dup_pkt_log, statst->log_access);	
-				} 
+    		        printf("Duplicate packet \n");
+					write_packet_info(&pi[i], 1, dup_pkt_log, statst->log_access);
+				}
 			} 
-        }
-		
-        sniffer_debug("Going to point next packet header \n");
-        pkt_hdr = (struct tpacket3_hdr *) ((uint8_t *)pkt_hdr + pkt_hdr->tp_next_offset);
-        sniffer_debug("Pointer to next packet header \n");
-    }
+		}
+		sniffer_debug("Going to point next packet header \n");
+		pkt_hdr = (struct tpacket3_hdr *) ((uint8_t *)pkt_hdr + pkt_hdr->tp_next_offset);
+			
+	}
+ 	
+	write_packet_info(pi, num_pkts, pkt_log, statst->log_access);	
+
     sniffer_debug("Ending processing of packets\n");
     
     __sync_add_and_fetch(&(statst->received_packets), num_pkts);

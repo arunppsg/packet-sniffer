@@ -51,13 +51,8 @@ int write_json(const char *json, struct log_file *log){
     return 0;
 }
 
-
-int write_packet_info(struct packet_info *pi, struct log_file *log,
-        pthread_mutex_t *lock){
-     
-    char json[MAX_JSON_STRING_SIZE] = "";
-    char text[MAX_FIELD_SIZE] = "";
-
+int extract_packet(struct packet_info *pi, char *json_string){
+	char text[MAX_FIELD_SIZE] = "";
     sniffer_debug("Extracting packet details in write_packet_info \n");
     sprintf(text, "{\"timestamp\":%lld.%.9ld,", (long long)pi->ts.tv_sec, pi->ts.tv_nsec);
     strcpy(json, text);
@@ -110,14 +105,27 @@ int write_packet_info(struct packet_info *pi, struct log_file *log,
     sprintf(text, "\"payload_hash\":\"%s\"}", pi->payload_hash);
     strcat(json, text);
 
-//    printf("%s\n", json);
+	return 0;
+}
+
+int write_packet_info(struct packet_info *pi, int num_pkts, 
+		struct log_file *log, pthread_mutex_t *lock){
+    // TODO_PI add valid packet check 
+    char json_string[MAX_JSON_STRING_SIZE] = "";
+
     int err;
     err = pthread_mutex_lock(lock);
     if(err != 0){
         fprintf(stderr, "%s: error acquiring hash add lock\n",
                 strerror(err));
     } 
-    write_json(json, log);
+	for(int i=0; i<num_pkts; i++){
+		strcpy(json_string, "");
+		if(pi[i]->is_valid){
+			extract_packet(&(pi[i]), json_string);
+			write_json(json_string, log);
+		}
+	}
     err = pthread_mutex_unlock(lock);
     if(err != 0){
         fprintf(stderr, "%s: error releasing file write lock\n",

@@ -29,13 +29,14 @@ struct sniffer_config{
     char *logdir;
     int time_delta;
     int num_threads;
+	int buffer_size;
     int verbosity;
     float buffer_fraction;
     int mode;
 };
 
 
-#define sniffer_config_init() { (char *)"wlp3s0", (char *)"output/", 0, 1, 0, 0.1, 0}
+#define sniffer_config_init() { (char *)"wlp3s0", (char *)"output/", 0, 1, 20, 0, 0.1, 0}
 
 struct packet_info {
     struct timespec ts;
