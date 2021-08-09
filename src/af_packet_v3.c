@@ -432,10 +432,11 @@ int process_all_packets_in_block(struct tpacket_block_desc *block_hdr,
 			if(pi[i].is_valid){
 				pthread_mutex_lock(statst->bf_access);		
 				int result = cpp_check(bf, (const char *)pi[i].payload_hash);
+                printf("%d\n", result);
 				pthread_mutex_unlock(statst->bf_access); 
-				
 				if (result == 1) {
 					/* Hash is found in the table - a dup packet */
+                    printf("Duplicate packet \n");
 					write_packet_info(&(pi[i]), 1, dup_pkt_log, statst->log_access);
 				}
 			} 

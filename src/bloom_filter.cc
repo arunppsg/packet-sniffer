@@ -14,10 +14,14 @@
 
 
 BloomFilter::BloomFilter(){
+    memset(this, 0, sizeof(BloomFilter));
     //this->m = 100000000;
     //this->n = 1000000000000;
-    this->m = 100000000;
-    this->n = 100000000;
+    /* For the below value of m and n, 
+     * duplicate packet detection takes place.
+     * Increasing these results in no detection */
+    this->m = 100;
+    this->n = 10000;
     this->k = this->get_optimal_k();
     this->bit_array = new bool[this->n];
     for(int i=0; i<this->n; ++i)
