@@ -99,8 +99,8 @@ int extract_packet(struct packet_info *pi, char *json_string){
     sprintf(text, "\"payload_size\":%d,", pi->payload_size);
     strcat(json_string, text);
 
-    sprintf(text, "\"payload_ascii\":\"%s\",", pi->payload_ascii);
-    strcat(json_string, text);
+//    sprintf(text, "\"payload_ascii\":\"%s\",", pi->payload_ascii);
+//    strcat(json_string, text);
 
     sprintf(text, "\"payload_hash\":\"%s\"}", pi->payload_hash);
     strcat(json_string, text);

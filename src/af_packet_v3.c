@@ -144,14 +144,14 @@ void ring_limits_init(struct ring_limits *rl, float frac){
     /* Don't change following parameters without good reason */
     rl->af_ring_limit      = 0xffffffff; /* setsockopt() can't allocate more than this so don't try */
     rl->af_framesize       = 2 * (1 << 10); /* default frame size: 2 KiB. */
-    //rl->af_blocksize       = 4 * (1 << 20); /* 4 MiB. (must be a multiple of af_framesize) */
+    rl->af_blocksize       = 4 * (1 << 20); /* 4 MiB. (must be a multiple of af_framesize) */
     rl->af_min_blocksize   = 64 * (1 << 10); /* 64 KiB */
-    //rl->af_target_blocks   = 64;
+    rl->af_target_blocks   = 64;
     rl->af_min_blocks      = 8;
     rl->af_blocktimeout    = 100;   /* milliseconds before a block is returned partially full */
 	rl->af_fanout_type	   = PACKET_FANOUT_FLAG_ROLLOVER;
-    rl->af_blocksize       = 256 * (1 << 20);
-    rl->af_target_blocks   = 32;
+    //rl->af_blocksize       = 256 * (1 << 20);
+    //rl->af_target_blocks   = 32;
     sniffer_debug("Initalized ring\n");
 }
 

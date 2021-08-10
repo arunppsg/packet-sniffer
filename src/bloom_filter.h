@@ -31,7 +31,6 @@
 #endif
 
 #if defined(__STDC__) || defined(__cplusplus)
-//    extern void c_function(BloomFilter*);
     extern int cpp_print(BloomFilter*);
     extern BloomFilter* cpp_load(BloomFilter*);
     extern int cpp_write(BloomFilter*);
