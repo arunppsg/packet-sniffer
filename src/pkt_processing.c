@@ -37,7 +37,7 @@ void ascii_hex_dump(const char *payload, int payload_size,
 }
 
 char* parse_tcp_packet(uint8_t *eth, u_short iphdr_len,
-         struct packet_info *pi){
+         struct packet_info *pi, int c_port){
     /*
      * Reference docs: https://datatracker.ietf.org/doc/html/rfc793 
      */
@@ -49,7 +49,16 @@ char* parse_tcp_packet(uint8_t *eth, u_short iphdr_len,
     }
     pi->sport = ntohs(tcph->source);
     pi->dport = ntohs(tcph->dest);
-
+    if(c_port != 0){
+        if((pi->sport != c_port) && (pi->dport != c_port )){
+            /* c_port holds the desired port's traffic which is to 
+             * be captured. When both the source port and 
+             * destination port of packet is not of interest,
+             * that packet can be discarded */
+            pi->is_valid = 0;
+            return NULL;
+        }
+    }
     pi->seq = ntohs(tcph->seq);
     pi->ack_seq = ntohs(tcph->ack_seq);
     pi->doff = tcph->doff;
@@ -69,7 +78,7 @@ char* parse_tcp_packet(uint8_t *eth, u_short iphdr_len,
 
 
 char* parse_udp_packet(uint8_t *eth, u_short iphdr_len,
-        struct packet_info *pi){
+        struct packet_info *pi, int c_port){
     /*
      * Reference docs: https://datatracker.ietf.org/doc/html/rfc768
      */
@@ -77,12 +86,22 @@ char* parse_udp_packet(uint8_t *eth, u_short iphdr_len,
     struct udphdr *udph = (struct udphdr *)(eth + ETH_HLEN + iphdr_len);
     pi->sport = ntohs(udph->source);
     pi->dport = ntohs(udph->dest);
+    if(c_port != 0){
+        if((pi->sport != c_port) && (pi->dport != c_port )){
+            /* c_port holds the desired port's traffic which is to 
+             * be captured. When both the source port and 
+             * destination port of packet is not of interest,
+             * that packet can be discarded */
+            pi->is_valid = 0;
+            return NULL;
+        }
+    }
     char *payload = (char *)(eth + SIZE_ETHERNET + iphdr_len + UDP_HEADER_LEN);
     sniffer_debug("Extracted\n"); 
     return payload;
 }
 
-int parse_packet(uint8_t *eth, struct packet_info *pi){
+int parse_packet(uint8_t *eth, struct packet_info *pi, int c_port){
     /*
      * Reference docs: https://datatracker.ietf.org/doc/html/rfc791
      */
@@ -107,10 +126,10 @@ int parse_packet(uint8_t *eth, struct packet_info *pi){
             char *payload;
             switch(pi->protocol){
                 case IPPROTO_TCP:
-                    payload = parse_tcp_packet(eth, iphdr_len, pi);
+                    payload = parse_tcp_packet(eth, iphdr_len, pi, c_port);
                     break;
                 case IPPROTO_UDP:
-                    payload = parse_udp_packet(eth, iphdr_len, pi);
+                    payload = parse_udp_packet(eth, iphdr_len, pi, c_port);
                     break;
                 default:
                     pi->is_valid = 0;

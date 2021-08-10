@@ -85,6 +85,7 @@ struct stats_tracking {
 	struct log_file *dup_pkt_log;
     int num_threads;
 	int mode;
+    int c_port;
     uint64_t received_packets;
     uint64_t received_bytes;
     uint64_t socket_packets;
@@ -115,6 +116,7 @@ struct thread_storage {
     int *t_start_p;  /* Clean start predicate */
     pthread_cond_t *t_start_c; /* Clean start condition */
     pthread_mutex_t *t_start_m;   /* Clean start mutex */
+    /* The below two lines are probably rebundant */
     pthread_mutex_t *log_access;
     pthread_mutex_t *bf_access;
 };
@@ -147,11 +149,6 @@ void ring_limits_init(struct ring_limits *rl, float frac){
     //rl->af_target_blocks   = 64;
     rl->af_min_blocks      = 8;
     rl->af_blocktimeout    = 100;   /* milliseconds before a block is returned partially full */
-    //rl->af_fanout_type     = PACKET_FANOUT_LB;  
-	/* PACKET_FANOUT_LB implements a round robin
-     algorithm for spreading traffic across sockets.
-     Since our case is only to capture packet, this can help
-     in load balanding of traffic */
 	rl->af_fanout_type	   = PACKET_FANOUT_FLAG_ROLLOVER;
     rl->af_blocksize       = 256 * (1 << 20);
     rl->af_target_blocks   = 32;
@@ -382,7 +379,7 @@ int process_all_packets_in_block(struct tpacket_block_desc *block_hdr,
 	
 	struct packet_info *pi = (struct packet_info *)malloc((num_pkts)* sizeof(struct packet_info));
     memset(pi, 0, num_pkts * sizeof(struct packet_info));
-//	struct packet_info *pi = (struct packet_info *)malloc((num_pkts + 1)* sizeof(struct packet_info));
+
     if(!pi){
         perror("could not allocate memory");
     }
@@ -407,23 +404,21 @@ int process_all_packets_in_block(struct tpacket_block_desc *block_hdr,
         pi[i].is_valid = 0;
   
         uint8_t *eth = (uint8_t*)pkt_hdr + pkt_hdr->tp_mac; 
-        parse_packet(eth, &(pi[i]));
-		if(mode == 1){	
+        parse_packet(eth, &(pi[i]), statst->c_port);
+		if(mode == 1 && pi[i].is_valid){	
 			/* Add hash entry to bloom filter and log packet */	
 			err = pthread_mutex_lock(statst->bf_access);
 	        if(err != 0){
 	            fprintf(stderr, "%s: error acquiring hash add lock\n",
 	                    strerror(err));
 	        } 
-			if(pi[i].is_valid)
-				cpp_add(bf, (const char *)pi[i].payload_hash);
+            cpp_add(bf, (const char *)pi[i].payload_hash);
 	        err = pthread_mutex_unlock(statst->bf_access);
 	        if(err != 0){
 	            fprintf(stderr, "%s: error releasing hash add lock\n",
 	                    strerror(err));
-	        } 
-		} else if(mode == 2){
-
+	        }
+		} else if(mode == 2 && pi[i].is_valid){
 			/* Add log entry to test file.
 			* Check whether hash entry is present. If not, write to 
 			* a seperate log file. */
@@ -431,15 +426,13 @@ int process_all_packets_in_block(struct tpacket_block_desc *block_hdr,
 			/* TODO
 			* Ideally the lock here is not needed because this operation only
 			* requires read from the bloom filter */
-			if(pi[i].is_valid){
-				pthread_mutex_lock(statst->bf_access);		
-				int result = cpp_check(bf, (const char *)pi[i].payload_hash);
-				pthread_mutex_unlock(statst->bf_access); 
-				if (result == 1) {
-					/* Hash is found in the table - a dup packet */ 
-					write_packet_info(&(pi[i]), 1, dup_pkt_log, statst->log_access);
-				}
-			} 
+			pthread_mutex_lock(statst->bf_access);		
+			int result = cpp_check(bf, (const char *)pi[i].payload_hash);
+			pthread_mutex_unlock(statst->bf_access); 
+			if (result == 1){
+				/* Hash is found in the table - a dup packet */ 
+				write_packet_info(&(pi[i]), 1, dup_pkt_log, statst->log_access);
+            }
 		}
 		sniffer_debug("Going to point next packet header \n");
 		pkt_hdr = (struct tpacket3_hdr *) ((uint8_t *)pkt_hdr + pkt_hdr->tp_next_offset);
@@ -828,6 +821,7 @@ enum status bind_and_dispatch(struct sniffer_config *cfg){
     }
 
     statst.mode = cfg->mode;
+    statst.c_port = cfg->c_port;
 
     statst.pkt_log = (struct log_file *)malloc(sizeof(struct log_file));
 	memset(statst.pkt_log, 0, sizeof(struct log_file));
