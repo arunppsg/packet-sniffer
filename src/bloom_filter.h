@@ -11,10 +11,14 @@
     class BloomFilter{
         int k;
         long m, n;
+        double fp_rate;
         bool *bit_array; 
     public:
         BloomFilter();
+        BloomFilter(long);
+        BloomFilter(long, double);
         int get_optimal_k();
+        long get_optimal_m();
         long compute_hash(std::string, int seed) const;
         int add(std::string);
         int check(std::string) const;
@@ -31,21 +35,24 @@
 #endif
 
 #if defined(__STDC__) || defined(__cplusplus)
-//    extern void c_function(BloomFilter*);
-    extern int cpp_print(BloomFilter*);
-    extern BloomFilter* cpp_load(BloomFilter*);
-    extern int cpp_write(BloomFilter*);
-    extern int cpp_check(const BloomFilter*, const char*);
-    extern int cpp_add(BloomFilter*, const char*);
-    extern BloomFilter* cpp_create_bloom_filter();
+    extern int print_bloom_filter(BloomFilter*);
+    extern BloomFilter* load_bloom_filter(BloomFilter*);
+    extern int write_bloom_filter(BloomFilter*);
+    extern int check_hash(const BloomFilter*, const char*);
+    extern int add_hash(BloomFilter*, const char*);
+    extern BloomFilter* create_bloom_filter();
+    extern BloomFilter* create_bloom_filter_l(long);
+    extern BloomFilter* create_bloom_filter_ld(long, double);
     extern int bloom_filter_size();
 #else 
-    extern int cpp_print();
-    extern BloomFilter* cpp_load();
-    extern int cpp_write(
-    extern int cpp_check();
-    extern int cpp_add();
-    extern BloomFilter* cpp_create_bloom_filter();
+    extern int print_bloom_filter();
+    extern BloomFilter* load_bloom_filter();
+    extern int write_bloom_filter();
+    extern int check_hash();
+    extern int add_hash();
+    extern BloomFilter* create_bloom_filter();
+    extern BloomFilter* create_bloom_filter_l();
+    extern BloomFilter* create_bloom_filter_ld();
     extern int bloom_filter_size();
 #endif
 

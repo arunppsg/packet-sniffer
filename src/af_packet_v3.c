@@ -85,6 +85,7 @@ struct stats_tracking {
 	struct log_file *dup_pkt_log;
     int num_threads;
 	int mode;
+    int c_port;
     uint64_t received_packets;
     uint64_t received_bytes;
     uint64_t socket_packets;
@@ -115,6 +116,7 @@ struct thread_storage {
     int *t_start_p;  /* Clean start predicate */
     pthread_cond_t *t_start_c; /* Clean start condition */
     pthread_mutex_t *t_start_m;   /* Clean start mutex */
+    /* The below two lines are probably rebundant */
     pthread_mutex_t *log_access;
     pthread_mutex_t *bf_access;
 };
@@ -142,19 +144,12 @@ void ring_limits_init(struct ring_limits *rl, float frac){
     /* Don't change following parameters without good reason */
     rl->af_ring_limit      = 0xffffffff; /* setsockopt() can't allocate more than this so don't try */
     rl->af_framesize       = 2 * (1 << 10); /* default frame size: 2 KiB. */
-    //rl->af_blocksize       = 4 * (1 << 20); /* 4 MiB. (must be a multiple of af_framesize) */
+    rl->af_blocksize       = 4 * (1 << 20); /* 4 MiB. (must be a multiple of af_framesize) */
     rl->af_min_blocksize   = 64 * (1 << 10); /* 64 KiB */
-    //rl->af_target_blocks   = 64;
+    rl->af_target_blocks   = 64;
     rl->af_min_blocks      = 8;
     rl->af_blocktimeout    = 100;   /* milliseconds before a block is returned partially full */
-    //rl->af_fanout_type     = PACKET_FANOUT_LB;  
-	/* PACKET_FANOUT_LB implements a round robin
-     algorithm for spreading traffic across sockets.
-     Since our case is only to capture packet, this can help
-     in load balanding of traffic */
 	rl->af_fanout_type	   = PACKET_FANOUT_FLAG_ROLLOVER;
-    rl->af_blocksize       = 256 * (1 << 20);
-    rl->af_target_blocks   = 32;
     sniffer_debug("Initalized ring\n");
 }
 
@@ -382,7 +377,7 @@ int process_all_packets_in_block(struct tpacket_block_desc *block_hdr,
 	
 	struct packet_info *pi = (struct packet_info *)malloc((num_pkts)* sizeof(struct packet_info));
     memset(pi, 0, num_pkts * sizeof(struct packet_info));
-//	struct packet_info *pi = (struct packet_info *)malloc((num_pkts + 1)* sizeof(struct packet_info));
+
     if(!pi){
         perror("could not allocate memory");
     }
@@ -407,23 +402,21 @@ int process_all_packets_in_block(struct tpacket_block_desc *block_hdr,
         pi[i].is_valid = 0;
   
         uint8_t *eth = (uint8_t*)pkt_hdr + pkt_hdr->tp_mac; 
-        parse_packet(eth, &(pi[i]));
-		if(mode == 1){	
+        parse_packet(eth, &(pi[i]), statst->c_port);
+		if(mode == 1 && pi[i].is_valid){	
 			/* Add hash entry to bloom filter and log packet */	
 			err = pthread_mutex_lock(statst->bf_access);
 	        if(err != 0){
 	            fprintf(stderr, "%s: error acquiring hash add lock\n",
 	                    strerror(err));
 	        } 
-			if(pi[i].is_valid)
-				cpp_add(bf, (const char *)pi[i].payload_hash);
+            add_hash(bf, (const char *)pi[i].payload_hash);
 	        err = pthread_mutex_unlock(statst->bf_access);
 	        if(err != 0){
 	            fprintf(stderr, "%s: error releasing hash add lock\n",
 	                    strerror(err));
-	        } 
-		} else if(mode == 2){
-
+	        }
+		} else if(mode == 2 && pi[i].is_valid){
 			/* Add log entry to test file.
 			* Check whether hash entry is present. If not, write to 
 			* a seperate log file. */
@@ -431,15 +424,13 @@ int process_all_packets_in_block(struct tpacket_block_desc *block_hdr,
 			/* TODO
 			* Ideally the lock here is not needed because this operation only
 			* requires read from the bloom filter */
-			if(pi[i].is_valid){
-				pthread_mutex_lock(statst->bf_access);		
-				int result = cpp_check(bf, (const char *)pi[i].payload_hash);
-				pthread_mutex_unlock(statst->bf_access); 
-				if (result == 1) {
-					/* Hash is found in the table - a dup packet */ 
-					write_packet_info(&(pi[i]), 1, dup_pkt_log, statst->log_access);
-				}
-			} 
+			pthread_mutex_lock(statst->bf_access);		
+			int result = check_hash(bf, (const char *)pi[i].payload_hash);
+			pthread_mutex_unlock(statst->bf_access); 
+			if (result == 1){
+				/* Hash is found in the table - a dup packet */ 
+				write_packet_info(&(pi[i]), 1, dup_pkt_log, statst->log_access);
+            }
 		}
 		sniffer_debug("Going to point next packet header \n");
 		pkt_hdr = (struct tpacket3_hdr *) ((uint8_t *)pkt_hdr + pkt_hdr->tp_next_offset);
@@ -451,7 +442,6 @@ int process_all_packets_in_block(struct tpacket_block_desc *block_hdr,
     pi = NULL;
 
     sniffer_debug("Ending processing of packets\n");
-    
     __sync_add_and_fetch(&(statst->received_packets), num_pkts);
     __sync_add_and_fetch(&(statst->received_bytes), byte_count);
     return 0; 
@@ -459,7 +449,7 @@ int process_all_packets_in_block(struct tpacket_block_desc *block_hdr,
 
 int af_packet_rx_ring_fanout_capture(struct thread_storage *thread_stor){
     sniffer_debug("Thread number %d is abot to start packet capturing\n", 
-            thread_stor->tnum); 
+            thread_stor->tnum);
     int err;
     /* At this point this thread is ready to go but
      * we need to wait for all other threads to be
@@ -574,9 +564,7 @@ int af_packet_rx_ring_fanout_capture(struct thread_storage *thread_stor){
          * now we should process the block. Otherwise, the block is still owned 
          * by the kernel and we should wait.
          */
-
-         if((block_header[cb]->hdr.bh1.block_status & TP_STATUS_USER) == 0){
-
+         if((block_header[cb]->hdr.bh1.block_status & TP_STATUS_USER) == 0){ 
              /*This branch is for 'user' bit not set meaning the kernel is 
               * still filling up the block with new packets */
 
@@ -586,21 +574,25 @@ int af_packet_rx_ring_fanout_capture(struct thread_storage *thread_stor){
              if(bstreak > thread_block_count){
                  bstreak = thread_block_count;
              }
-
-             /* TODO Is mutex lock really needed or can it be skipped? */
+            /* The use of a mutex can be justified in this case
+             * because 1) this will rarely ever clash with the stats
+             * thread and 2) there aren't any blocks for us to process
+             * at the moment so we can take a tiny bit of time tracking
+             * stats and such
+             */
              err = pthread_mutex_lock(bstreak_m);
              if(err != 0){
                  fprintf(stderr, "%s: error acquiring bstreak mutex lock \n", strerror(err));
                  exit(255);
-             } 
+             }
 
              block_streak_hist[bstreak] += time_d;
+
              err = pthread_mutex_unlock(bstreak_m);
              if(err != 0){
                  fprintf(stderr, "%s: error releasing bstreak mutex unlock \n", strerror(err));
                  exit(255);
-             } 
-
+             }
              bstreak = 0;
 
              /* If poll() has returned but we haven't found any data .. */
@@ -615,7 +607,7 @@ int af_packet_rx_ring_fanout_capture(struct thread_storage *thread_stor){
                          break; /* stopping at first block round */
                      }
                  }
-             }
+             } 
 
              /* polling the kernel when the data is returned */
              polret = poll(&psockfd, 1, 1000); /* letting poll wait up to a second */
@@ -626,14 +618,13 @@ int af_packet_rx_ring_fanout_capture(struct thread_storage *thread_stor){
              } else {
                 pstreak++;
              }
-             
-         } else {
-             
+
+         } else { 
              /* In this branch, the bit is set meaning the kernel has filled this block 
               * and returned it to us for processing */
              bstreak++;
 
-             /* We found data. Process it */ 
+             /* We found data. Process it */
              process_all_packets_in_block(block_header[cb], statst); 
              
              /* Reset accounting */
@@ -644,8 +635,8 @@ int af_packet_rx_ring_fanout_capture(struct thread_storage *thread_stor){
 
              cb += 1;
              cb = cb % thread_block_count;
-             
          }
+
      } /* End of while */
      fprintf(stderr, "Thread %d with thread id %lu exiting \n",
              thread_stor->tnum, thread_stor->tid);
@@ -823,11 +814,13 @@ enum status bind_and_dispatch(struct sniffer_config *cfg){
     statst.t_start_m = &t_start_m;
     statst.log_access = &log_access;
     statst.bf_access = &bf_access;
+
     if(cfg->verbosity == 1){
         statst.verbosity = 1;
     }
 
     statst.mode = cfg->mode;
+    statst.c_port = cfg->c_port;
 
     statst.pkt_log = (struct log_file *)malloc(sizeof(struct log_file));
 	memset(statst.pkt_log, 0, sizeof(struct log_file));
@@ -838,13 +831,17 @@ enum status bind_and_dispatch(struct sniffer_config *cfg){
 	time(&rawtime);
 	sprintf(statst.pkt_log->filename, "%slog%ld.json", statst.pkt_log->dirname, rawtime);
 	statst.pkt_log->mode = 1;
-
-    BloomFilter *bf = cpp_create_bloom_filter();
-    if(!bf){
-        perror("could not allocate memory for bloom filter\n");
-        exit(255);
-    }
     
+    BloomFilter *bf;
+
+    if(statst.mode == 1 || statst.mode == 2){
+        bf = create_bloom_filter_ld(cfg->n_elements, cfg->fp_rate);
+        if(!bf){
+            perror("could not allocate memory for bloom filter\n");
+            exit(255);
+        } 
+    }
+
     if (statst.mode == 2){
         /* Perform detection */ 
     	statst.dup_pkt_log = (struct log_file *)malloc(sizeof(struct log_file));
@@ -857,13 +854,14 @@ enum status bind_and_dispatch(struct sniffer_config *cfg){
     	statst.dup_pkt_log->mode = 2;
         printf("Intialized duplicate log file. \nfilename: %s directory name: %s mode: %d \n",
                statst.dup_pkt_log->filename, statst.dup_pkt_log->dirname, statst.dup_pkt_log->mode);
-		cpp_load(bf);
+		load_bloom_filter(bf);
         printf("Loaded bloom filter ");
+        fflush(stdout);
     } else if(statst.mode == 1 || statst.mode == 0){
         // No duplicate packet detection
         statst.dup_pkt_log = NULL;
     } 
- 
+     
     statst.bf = bf;
 	
     struct thread_storage *tstor; // pointer to array of struct thread_storage, one for each thread 
@@ -947,6 +945,13 @@ enum status bind_and_dispatch(struct sniffer_config *cfg){
         if (err) {
             fprintf(stderr, "%s: error initializing block streak mutex attributes for thread %d\n",
                     strerror(err), thread);
+            exit(255);
+        }
+
+        err = pthread_mutex_init(&(tstor[thread].bstreak_m), &m_attr);
+        if(err){
+            fprintf(stderr, "%s: error initializing block stream mutex for thread %d\n", strerror(err),
+                    thread);
             exit(255);
         }
 
@@ -1044,7 +1049,7 @@ enum status bind_and_dispatch(struct sniffer_config *cfg){
 
 	if(statst.mode == 1){
 		/* Write bloom filter */
-        cpp_write(bf); 
+        write_bloom_filter(bf); 
 	}
 
     fprintf(stderr, "--\n"

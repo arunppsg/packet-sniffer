@@ -33,10 +33,13 @@ struct sniffer_config{
     int verbosity;
     float buffer_fraction;
     int mode;
+    int c_port;
+    long n_elements;
+    double fp_rate;
 };
 
 
-#define sniffer_config_init() { (char *)"wlp3s0", (char *)"output/", 0, 1, 20, 0, 0.1, 0}
+#define sniffer_config_init() { (char *)"wlp3s0", (char *)"output/", 0, 1, 20, 0, 0.1, 0, 0, 100, 0.01}
 
 struct packet_info {
     struct timespec ts;

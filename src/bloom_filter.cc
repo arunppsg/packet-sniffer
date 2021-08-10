@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstring>
 #include <cstdint>
+#include <mutex>
 
 #include "bloom_filter.h"
 #include "xxhash64.h"
@@ -12,25 +13,49 @@
  * This program defines BloomFilter class 
  */
 
-
 BloomFilter::BloomFilter(){
-    memset(this, 0, sizeof(BloomFilter));
-    //this->m = 100000000;
-    //this->n = 1000000000000;
-    /* For the below value of m and n, 
-     * duplicate packet detection takes place.
-     * Increasing these results in no detection */
-    this->m = 100;
     this->n = 10000;
+    this->fp_rate = pow(10, -3);
+    this->m = this->get_optimal_m(); 
     this->k = this->get_optimal_k();
-    this->bit_array = new bool[this->n];
-    for(int i=0; i<this->n; ++i)
+    this->bit_array = new bool[this->m]; 
+    for(int i=0; i<this->m; ++i)
         this->bit_array[i] = 0;
 }
 
+BloomFilter::BloomFilter(long n){
+    this->n = n;
+    this->fp_rate = pow(10, -3);
+    this->m = this->get_optimal_m(); 
+    this->k = this->get_optimal_k();
+    this->bit_array = new bool[this->m]; 
+    for(int i=0; i<this->m; ++i)
+        this->bit_array[i] = 0;
+    this->print();
+}
+
+BloomFilter::BloomFilter(long n, double fp_rate){
+    this->n = n;
+    this->fp_rate = fp_rate;
+    this->m = this->get_optimal_m();
+    this->k = this->get_optimal_k();
+    this->bit_array = new bool[this->m];
+    for(int i=0; i<this->m; ++i)
+        this->bit_array[i] = 0;
+    this->print();
+}
+
+long BloomFilter::get_optimal_m(){
+    double a = log2(1 / this->fp_rate);
+    double b = log(2);  // base e
+    return ceil(this->n * a / b);
+}
+
 int BloomFilter::get_optimal_k(){
-    double k = (log(2) * (this->m / this->n)) + 1;
-    return round(k);
+    double k = log(2) * (this->m / this->n);
+    k = ceil(k);
+    std::cout << " k value is " << k << std::endl; 
+    return ceil(k);
 }
 
 long BloomFilter::compute_hash(std::string message, int seed) const{
@@ -41,22 +66,48 @@ long BloomFilter::compute_hash(std::string message, int seed) const{
 int BloomFilter::add(std::string message){
     for(int i=0; i < this->k; ++i){
         long hash = compute_hash(message, i);
+        std::cout << " Added " << this->bit_array[hash];
         this->bit_array[hash] = 1;
+        std::cout << " After Added " << this->bit_array[hash] << std::endl;
     }
     return 1;
 }
 
 int BloomFilter::write(){
+    int err;
     FILE *fp = fopen("bloomfilter.data", "wb");
-    fwrite(this->bit_array, sizeof(bool), sizeof(this->bit_array), fp);
+    err = fwrite_unlocked(this->bit_array, sizeof(bool), this->m , fp);
+    if(err == this->m){
+        std::cout << "Successfule written " << std::endl;
+    } else {
+        std::cout << "Unsuccessful write " << std::endl;
+    }
     fclose(fp);
-
     return 0;
 }
 
 int BloomFilter::load(){
+    int err = 0;
     FILE *fp = fopen("bloomfilter.data", "rb");
-    fread(this->bit_array, sizeof(bool), sizeof(this->bit_array), fp);
+    if(fp == NULL){
+        std::cout << "Error in opening file. Exiting" << std::endl;
+        exit(0); 
+    }
+    if(feof(fp)){
+        std::cout << "End of file. Exiting" << std::endl;
+        exit(0);
+    }
+    if(ferror(fp)){
+        std::cout << "Error in file handling. Exiting" << std::endl;
+        exit(0);
+    }
+
+    err = fread_unlocked(this->bit_array, sizeof(bool), this->m, fp); 
+    if(err == this->m){
+        std::cout << "Successfule read " << std::endl;
+    } else {
+        std::cout << "Unsuccessful read" << std::endl;
+    }
     fclose(fp);
     return 0;
 }
@@ -66,53 +117,67 @@ int BloomFilter::check(std::string message) const{
      * 1: hash is found in the table
      * 0: hash is not found in the table
      */
+    std::cout << "In hash check ";
     for(int i=0; i<this->k; ++i){
         long hash = compute_hash(message, i);
         if(this->bit_array[hash] == 0)
             return 0;
     }
+    std::cout << "Hash is present " << std::endl;
     return 1;
 }
 
 int BloomFilter::print(){
-    std::cout << "M " << this->m << std::endl;
-    std::cout << "N " << this->n << std::endl;
-    std::cout << "k " << this->k << std::endl;
+    std::cout << "Bloom filter parameters ";
+    std::cout << "M " << this->m << " N " << this->n << std::endl;
+    std::cout << "k " << this->k << " false positive rate " 
+              << this->fp_rate << std::endl;
+    /*for(int i=0; i<this->m; i++)
+        std::cout << this->bit_array[i];
+    std::cout << std::endl;*/
     return 0;
 }
 
-int cpp_print(BloomFilter *bf){
+int print_bloom_filter(BloomFilter *bf){
     bf->print();
     return 0;
 }
 
-BloomFilter* cpp_load(BloomFilter *bf){
+BloomFilter* load_bloom_filter(BloomFilter *bf){
     bf->load();
-    std::cout << "Successfully loaded bloom filter \n";
-    cpp_print(bf);
     return bf;
 }
 
-int cpp_write(BloomFilter *bf){
+int write_bloom_filter(BloomFilter *bf){
     bf->write();
 	return 0; 
 }
 
-int cpp_check(const BloomFilter *bf, const char* message){
+int check_hash(const BloomFilter *bf, const char* message){
     std::string msg(message);
     int result = bf->check(msg);
+//    std::cout << " check result  " << result << std::endl;
     return result;
 }
 
-int cpp_add(BloomFilter *bf, const char* message){
+int add_hash(BloomFilter *bf, const char* message){
     std::string msg(message);
     bf->add(msg);
     return 1;
 }
 
-BloomFilter* cpp_create_bloom_filter(){
+BloomFilter* create_bloom_filter(){
     return new BloomFilter();
 }
+
+BloomFilter* create_bloom_filter_l(long n){
+    return new BloomFilter(n);
+}
+
+BloomFilter* create_bloom_filter_ld(long n, double fp_rate){
+    return new BloomFilter(n, fp_rate);
+}
+
 
 int bloom_filter_size(){
     return sizeof(BloomFilter);
