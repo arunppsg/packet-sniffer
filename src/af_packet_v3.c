@@ -147,10 +147,12 @@ void ring_limits_init(struct ring_limits *rl, float frac){
     //rl->af_target_blocks   = 64;
     rl->af_min_blocks      = 8;
     rl->af_blocktimeout    = 100;   /* milliseconds before a block is returned partially full */
-    rl->af_fanout_type     = PACKET_FANOUT_LB;  /* PACKET_FANOUT_LB implements a round robin
-                                                   algorithm for spreading traffic across sockets.
-                                                  Since our case is only to capture packet, this can help
-                                                  in load balanding of traffic */
+    //rl->af_fanout_type     = PACKET_FANOUT_LB;  
+	/* PACKET_FANOUT_LB implements a round robin
+     algorithm for spreading traffic across sockets.
+     Since our case is only to capture packet, this can help
+     in load balanding of traffic */
+	rl->af_fanout_type	   = PACKET_FANOUT_FLAG_ROLLOVER;
     rl->af_blocksize       = 256 * (1 << 20);
     rl->af_target_blocks   = 32;
     sniffer_debug("Initalized ring\n");
@@ -432,11 +434,9 @@ int process_all_packets_in_block(struct tpacket_block_desc *block_hdr,
 			if(pi[i].is_valid){
 				pthread_mutex_lock(statst->bf_access);		
 				int result = cpp_check(bf, (const char *)pi[i].payload_hash);
-                printf("%d\n", result);
 				pthread_mutex_unlock(statst->bf_access); 
 				if (result == 1) {
-					/* Hash is found in the table - a dup packet */
-                    printf("Duplicate packet \n");
+					/* Hash is found in the table - a dup packet */ 
 					write_packet_info(&(pi[i]), 1, dup_pkt_log, statst->log_access);
 				}
 			} 
