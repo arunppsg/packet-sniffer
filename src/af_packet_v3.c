@@ -28,12 +28,12 @@
 #include <linux/if_ether.h>
 #include <linux/if_packet.h>
 
-#include "signal_handling.h"
-#include "sniffer.h"
-#include "pkt_processing.h"
-#include "json_file_io.h"
-#include "utils.h"
-#include "bloom_filter.h"
+#include "include/signal_handling.h"
+#include "include/sniffer.h"
+#include "include/pkt_processing.h"
+#include "include/json_file_io.h"
+#include "include/utils.h"
+#include "include/bloom_filter.h"
 
 /* 
  * Signal Handling

@@ -7,8 +7,8 @@
 #include <cstdint>
 #include <mutex>
 
-#include "bloom_filter.h"
-#include "xxhash64.h"
+#include "include/bloom_filter.h"
+#include "include/xxhash64.h"
 /*
  * This program defines BloomFilter class 
  */
@@ -66,9 +66,7 @@ long BloomFilter::compute_hash(std::string message, int seed) const{
 int BloomFilter::add(std::string message){
     for(int i=0; i < this->k; ++i){
         long hash = compute_hash(message, i);
-        std::cout << " Added " << this->bit_array[hash];
         this->bit_array[hash] = 1;
-        std::cout << " After Added " << this->bit_array[hash] << std::endl;
     }
     return 1;
 }

@@ -11,7 +11,7 @@
 #include <errno.h>
 #include <pthread.h>
 #include <unistd.h>
-#include "signal_handling.h"
+#include "include/signal_handling.h"
 
 int sig_close_flag = 0; /* Watched by threads while processing packets */
 

@@ -15,9 +15,9 @@
 #include <stdlib.h>
 #include <errno.h>
 
-#include "sniffer.h"
-#include "af_packet_v3.h"
-#include "signal_handling.h"
+#include "include/sniffer.h"
+#include "include/af_packet_v3.h"
+#include "include/signal_handling.h"
 
 char sniffer_help[] = " \
 Example Usage: \n\

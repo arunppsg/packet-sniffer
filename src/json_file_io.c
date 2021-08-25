@@ -6,9 +6,9 @@
 #include <time.h>
 #include <netinet/in.h>
 
-#include "json_file_io.h"
-#include "sniffer.h"
-#include "bloom_filter.h"
+#include "include/json_file_io.h"
+#include "include/sniffer.h"
+#include "include/bloom_filter.h"
 
 #define MAX_JSON_STRING_SIZE 65536
 #define MAX_FIELD_SIZE 65536

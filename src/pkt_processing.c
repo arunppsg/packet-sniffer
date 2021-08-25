@@ -13,9 +13,9 @@
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 
-#include "sniffer.h"
-#include "sha512.h"
-#include "pkt_processing.h"
+#include "include/sniffer.h"
+#include "include/sha512.h"
+#include "include/pkt_processing.h"
 
 void ascii_hex_dump(const char *payload, int payload_size,
          unsigned char *ascii_dump){

@@ -11,7 +11,7 @@
 #include <openssl/sha.h>
 #include <string.h>
 
-#include "sha512.h"
+#include "include/sha512.h"
 
 int sha512(const char *data, unsigned char *digest){
     unsigned char byte_digest[SHA512_DIGEST_LENGTH];
