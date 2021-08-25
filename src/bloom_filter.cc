@@ -115,7 +115,6 @@ int BloomFilter::check(std::string message) const{
      * 1: hash is found in the table
      * 0: hash is not found in the table
      */
-    std::cout << "In hash check ";
     for(int i=0; i<this->k; ++i){
         long hash = compute_hash(message, i);
         if(this->bit_array[hash] == 0)
