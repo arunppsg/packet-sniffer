@@ -120,7 +120,7 @@ int BloomFilter::check(std::string message) const{
         if(this->bit_array[hash] == 0)
             return 0;
     }
-    std::cout << "Hash is present " << std::endl;
+//    std::cout << "Hash is present " << std::endl;
     return 1;
 }
 

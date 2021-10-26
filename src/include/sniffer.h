@@ -34,7 +34,7 @@ struct sniffer_config{
     float buffer_fraction;
     int mode;
     int c_port;
-    long n_elements;
+    long n_elements;  // Parameters for bloom filter
     double fp_rate;
 };
 

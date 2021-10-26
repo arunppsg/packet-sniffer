@@ -15,19 +15,15 @@
 #define ENTRIES_PER_LOG 10000000
 
 int write_json(const char *json_string, struct log_file *log){
-    /*
-     * Refer: https://stackoverflow.com/questions/12451431/loading-and-parsing-a-json_string-file-with-multiple-json_string-objects
-     * https://datatracker.ietf.org/doc/html/rfc7159
-     */
     log->pkt_count = (log->pkt_count + 1) % ENTRIES_PER_LOG;
 	if(log->pkt_count == 0){
 		time_t rawtime;
 		time(&rawtime);
 		strcpy(log->filename, "");
 		if(log->mode == 1)
-			sprintf(log->filename, "%spkt_log%ld.json_string", log->dirname, rawtime);
+			sprintf(log->filename, "%spkt_log%ld.json", log->dirname, rawtime);
 		else if(log->mode == 2)
-			sprintf(log->filename, "%sdup_pkt_log%ld.json_string", log->dirname, rawtime);
+			sprintf(log->filename, "%sdup_pkt_log%ld.json", log->dirname, rawtime);
 	}
 	
     // create file if it doesn't exist
@@ -53,7 +49,6 @@ int write_json(const char *json_string, struct log_file *log){
 
 int extract_packet(struct packet_info *pi, char *json_string){
 	char text[MAX_FIELD_SIZE] = "";
-    sniffer_debug("Extracting packet details in write_packet_info \n");
     sprintf(text, "{\"timestamp\":%lld.%.9ld,", (long long)pi->ts.tv_sec, pi->ts.tv_nsec);
     strcpy(json_string, text);
 

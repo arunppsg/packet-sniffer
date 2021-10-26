@@ -57,7 +57,7 @@ utils.o: include/utils.h
 bloom_filter.o: include/bloom_filter.h
 
 debug-sniffer: CFLAGS += -DDEBUG
-debug-sniffer: clean sniffer.o
+debug-sniffer: clean sniffer
 
 .PHONY: clean
 clean:
